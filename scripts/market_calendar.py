@@ -1,6 +1,12 @@
-"""NYSE trading calendar and session helpers (US/Eastern). Stdlib only."""
+"""NYSE trading calendar and session helpers (US/Eastern). Stdlib only.
+
+Rule-based holidays and early closes. Unscheduled closures (days of mourning,
+weather, etc.) are **not** in the built-in table — set ``NYSE_EXTRA_CLOSURES``
+(comma-separated ``YYYY-MM-DD``) or ``settings.extra_closures`` on the watchlist.
+"""
 from __future__ import annotations
 import datetime as dt
+import os
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
@@ -34,6 +40,32 @@ def _observed(d):
     return d
 
 
+def parse_dates(values):
+    """Coerce an iterable of ISO strings or dates into a set of ``date`` objects."""
+    out = set()
+    for v in values or []:
+        if isinstance(v, dt.datetime):
+            out.add(v.date())
+        elif isinstance(v, dt.date):
+            out.add(v)
+        else:
+            s = str(v).strip()
+            if s:
+                out.add(dt.date.fromisoformat(s[:10]))
+    return out
+
+
+def extra_closures(extra=None):
+    """Unscheduled full-day closures: env ``NYSE_EXTRA_CLOSURES`` plus ``extra``."""
+    out = parse_dates(extra)
+    raw = os.environ.get("NYSE_EXTRA_CLOSURES") or ""
+    for part in raw.split(","):
+        part = part.strip()
+        if part:
+            out.add(dt.date.fromisoformat(part[:10]))
+    return out
+
+
 def nyse_holidays(year):
     """Full-day NYSE closures for a year (rule-based; excludes ad-hoc closures)."""
     h = {
@@ -54,6 +86,12 @@ def nyse_holidays(year):
     return h
 
 
+def holiday_name(d: dt.date, extra=None) -> str | None:
+    if d in extra_closures(extra):
+        return "unscheduled closure"
+    return nyse_holidays(d.year).get(d)
+
+
 def early_closes(year):
     """Days the market closes at 1:00 PM ET."""
     out = set()
@@ -69,14 +107,14 @@ def early_closes(year):
     return {d for d in out if d.weekday() < 5 and d not in hol}
 
 
-def is_trading_day(d: dt.date) -> bool:
-    return d.weekday() < 5 and d not in nyse_holidays(d.year)
+def is_trading_day(d: dt.date, extra=None) -> bool:
+    return d.weekday() < 5 and d not in nyse_holidays(d.year) and d not in extra_closures(extra)
 
 
-def session(now: dt.datetime | None = None) -> str:
+def session(now: dt.datetime | None = None, extra=None) -> str:
     """Return one of: closed, pre, regular, after."""
     now = (now or dt.datetime.now(ET)).astimezone(ET)
-    if not is_trading_day(now.date()):
+    if not is_trading_day(now.date(), extra=extra):
         return "closed"
     t = now.time()
     close = dt.time(13, 0) if now.date() in early_closes(now.year) else dt.time(16, 0)
@@ -90,9 +128,9 @@ def session(now: dt.datetime | None = None) -> str:
     return "closed"
 
 
-def next_trading_day(d: dt.date) -> dt.date:
+def next_trading_day(d: dt.date, extra=None) -> dt.date:
     d += dt.timedelta(days=1)
-    while not is_trading_day(d):
+    while not is_trading_day(d, extra=extra):
         d += dt.timedelta(days=1)
     return d
 

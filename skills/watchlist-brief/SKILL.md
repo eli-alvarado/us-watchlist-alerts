@@ -9,7 +9,7 @@ Informational summary only - **not financial advice; no trade suggestions or ord
 
 ## Steps
 1. Determine context with `python scripts/market_calendar.py`. Morning brief ~08:30-09:25 ET; close brief after 16:05 ET. On holidays/weekends, say the market is closed and give the next session.
-2. Generate the table: `python scripts/brief.py --kind morning` (or `--kind close`). Columns: Ticker | Price | Chg | RSI14 | Trend (SMA50 vs SMA200) | To stop | To target 1.
+2. Generate the table: `python scripts/brief.py --kind morning` (or `--kind close`). Columns: Ticker | Price | Chg | RSI14 | Trend (SMA50 vs SMA200) | To stop | To target 1. "To stop" is remaining cushion (positive = room left); shorts use stop-minus-price. Earnings dates in the footer are upcoming only, and only present when yfinance populated them.
 3. Run `python scripts/alerts.py --dry-run --force-session --format json` to list conditions currently true without consuming cooldowns; mention notable ones.
 4. Optionally add 1 headline per ticker that moved > 3% or has earnings within 7 days (web search, or `tickertick`/news tools if available). Cite sources; never fabricate news.
 5. Write the brief:

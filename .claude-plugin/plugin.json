@@ -1,0 +1,14 @@
+{
+  "name": "us-watchlist-alerts",
+  "displayName": "US Watchlist & Price Alerts",
+  "version": "0.1.0",
+  "description": "US stock watchlists, NYSE-aware price alerts, and morning/close briefs. No API keys required. Never places trades.",
+  "author": {
+    "name": "Eli Alvarado",
+    "url": "https://github.com/eli-alvarado"
+  },
+  "homepage": "https://github.com/eli-alvarado/us-watchlist-alerts",
+  "repository": "https://github.com/eli-alvarado/us-watchlist-alerts",
+  "license": "MIT",
+  "keywords": ["stocks", "watchlist", "alerts", "yahoo-finance", "nyse"]
+}

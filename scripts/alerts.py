@@ -32,15 +32,18 @@ def evaluate_rule(rule, t, q, cfg):
         if s is not None and ((t.get("side", "long") != "short" and p <= s) or (t.get("side") == "short" and p >= s)):
             return True, f"{sym} ${p:.2f} hit STOP ${s:.2f}", f"{typ}:{s}"
     if typ == "target_hit":
-        for tg in sorted(t.get("targets") or [], reverse=t.get("side") != "short"):
-            if (t.get("side") != "short" and p >= tg) or (t.get("side") == "short" and p <= tg):
+        short = t.get("side") == "short"
+        tgs = [v] if v is not None else list(t.get("targets") or [])
+        # nearest remaining target first (long: lowest; short: highest)
+        for tg in sorted(tgs, reverse=short):
+            if (not short and p >= tg) or (short and p <= tg):
                 return True, f"{sym} ${p:.2f} reached target ${tg:.2f}", f"{typ}:{tg}"
     if chg is not None:
         if typ == "pct_change_up" and chg >= v: return True, f"{sym} up {chg:+.2f}% today", typ
         if typ == "pct_change_down" and chg <= -abs(v): return True, f"{sym} down {chg:+.2f}% today", typ
         if typ == "pct_move" and abs(chg) >= v: return True, f"{sym} moved {chg:+.2f}% today", typ
     o = q.get("open")
-    if o and pc:
+    if o is not None and pc:
         gap = _pct(o, pc)
         if typ == "gap_up" and gap >= (v or 2): return True, f"{sym} gapped up {gap:+.2f}% (open ${o:.2f})", typ
         if typ == "gap_down" and gap <= -(v or 2): return True, f"{sym} gapped down {gap:+.2f}% (open ${o:.2f})", typ
@@ -49,8 +52,10 @@ def evaluate_rule(rule, t, q, cfg):
     if typ == "new_52w_high" and prior and p > max(prior): return True, f"{sym} new 52-week high ${p:.2f}", typ
     if typ == "new_52w_low" and prior and p < min(prior): return True, f"{sym} new 52-week low ${p:.2f}", typ
     near = v if v is not None else cfg["near_52w_pct"]
-    if typ == "near_52w_high" and hi and _pct(hi, p) <= near: return True, f"{sym} within {_pct(hi,p):.1f}% of 52w high ${hi:.2f}", typ
-    if typ == "near_52w_low" and lo and _pct(p, lo) <= near: return True, f"{sym} within {_pct(p,lo):.1f}% of 52w low ${lo:.2f}", typ
+    if typ == "near_52w_high" and hi is not None and _pct(hi, p) <= near:
+        return True, f"{sym} within {_pct(hi,p):.1f}% of 52w high ${hi:.2f}", typ
+    if typ == "near_52w_low" and lo is not None and _pct(p, lo) <= near:
+        return True, f"{sym} within {_pct(p,lo):.1f}% of 52w low ${lo:.2f}", typ
     series = closes[:-1] + [p] if closes else []
     if typ in ("golden_cross", "death_cross"):
         fast, slow = rule.get("fast", 50), rule.get("slow", 200)
@@ -65,23 +70,56 @@ def evaluate_rule(rule, t, q, cfg):
             return True, f"{sym} RSI {r:.1f} {'>=' if typ=='rsi_above' else '<='} {v:g}", typ
     if typ == "volume_spike":
         avg = q.get("avg_volume_20d"); vol = q.get("volume"); m = v or cfg["volume_spike_multiple"]
-        if avg and vol and vol >= m * avg: return True, f"{sym} volume {vol/avg:.1f}x 20-day avg", typ
+        if avg and vol is not None and vol >= m * avg:
+            return True, f"{sym} volume {vol/avg:.1f}x 20-day avg", typ
     if typ == "earnings_within" and q.get("earnings_date"):
-        days = (dt.date.fromisoformat(str(q["earnings_date"])[:10]) - cfg["_today"]).days
+        try:
+            days = (dt.date.fromisoformat(str(q["earnings_date"])[:10]) - cfg["_today"]).days
+        except ValueError:
+            return False, "", typ
         if 0 <= days <= (v if v is not None else cfg["earnings_days"]):
             return True, f"{sym} reports earnings in {days} day(s) ({str(q['earnings_date'])[:10]})", f"{typ}:{q['earnings_date']}"
     return False, "", typ
 
 
+def _expand_rules(t):
+    """Implicit stop/target rules, with one target_hit rule per target so T1 latching does not hide T2."""
+    rules = list(t.get("alerts") or [])
+    if t.get("stop") is not None and not any(r.get("type") == "stop_hit" for r in rules):
+        rules.append({"type": "stop_hit"})
+    if t.get("targets") and not any(r.get("type") == "target_hit" for r in rules):
+        rules.append({"type": "target_hit"})
+    out = []
+    for r in rules:
+        if r.get("type") == "target_hit" and r.get("value") is None:
+            for tg in (t.get("targets") or []):
+                out.append({**r, "value": tg})
+        else:
+            out.append(r)
+    return out
+
+
 def load_state(path):
+    """Load cooldown state. Corrupt or empty files start fresh (with a warning flag)."""
     if path and os.path.exists(path):
-        return json.load(open(path))
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            if not isinstance(data, dict) or not isinstance(data.get("fired"), dict):
+                return {"fired": {}, "warning": f"ignored malformed state file {path}"}
+            return data
+        except (json.JSONDecodeError, OSError) as e:
+            return {"fired": {}, "warning": f"reset unreadable state file {path}: {e}"}
     return {"fired": {}}
 
 
 def save_state(state, path):
+    payload = {k: v for k, v in state.items() if k != "warning"}
     tmp = path + ".tmp"
-    json.dump(state, open(tmp, "w"), indent=2); os.replace(tmp, path)
+    with open(tmp, "w") as f:
+        json.dump(payload, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
 
 
 def should_emit(state, key, now, cooldown_min, trading_date):
@@ -109,25 +147,29 @@ DAILY = {"pct_change_up", "pct_change_down", "pct_move", "gap_up", "gap_down", "
 
 def run(wl, state, quotes_by_sym, now, force_session=False):
     cfg = {**DEFAULTS, **(wl.get("settings") or {})}
+    extra = mc.parse_dates(cfg.get("extra_closures"))
     cfg["_today"] = now.astimezone(mc.ET).date()
-    sess = mc.session(now)
+    sess = mc.session(now, extra=extra)
     out, errors = [], []
     if not force_session and sess not in cfg["sessions"]:
         return {"session": sess, "skipped": True, "alerts": [], "errors": []}
     trading_date = cfg["_today"].isoformat()
+    cap = cfg["max_alerts_per_run"]
+    truncated = False
     for t in wl["tickers"]:
         q = quotes_by_sym.get(t["symbol"])
         if not q or "error" in q:
             errors.append({"symbol": t["symbol"], "error": (q or {}).get("error", "no quote")}); continue
-        rules = list(t.get("alerts") or [])
-        if t.get("stop") is not None and not any(r["type"] == "stop_hit" for r in rules): rules.append({"type": "stop_hit"})
-        if t.get("targets") and not any(r["type"] == "target_hit" for r in rules): rules.append({"type": "target_hit"})
-        for r in rules:
+        for r in _expand_rules(t):
             fired, msg, cond = evaluate_rule(r, t, q, cfg)
             key = f"{t['symbol']}|{cond}"
             if fired:
                 cd = r.get("cooldown_minutes", cfg["cooldown_minutes"])
                 if should_emit(state, key, now, cd, trading_date):
+                    if len(out) >= cap:
+                        # Do not latch alerts we are not going to report — they must be free to fire next run.
+                        truncated = True
+                        continue
                     out.append({"symbol": t["symbol"], "type": r["type"], "message": msg, "price": q["price"],
                                 "key": key, "session": sess, "source": q.get("source")})
                     state["fired"][key] = {"at": now.isoformat(), "active": True, "trading_date": trading_date,
@@ -141,8 +183,10 @@ def run(wl, state, quotes_by_sym, now, force_session=False):
                         lvl = float(lvl) if lvl not in (None, "None") else None
                         if r["type"].startswith("rsi") or lvl is None or abs(_pct(q["price"], lvl)) >= cfg["rearm_pct"]:
                             rec["active"] = False
-    out = out[: cfg["max_alerts_per_run"]]
-    return {"session": sess, "skipped": False, "alerts": out, "errors": errors}
+    res = {"session": sess, "skipped": False, "alerts": out, "errors": errors}
+    if truncated:
+        res["truncated"] = True
+    return res
 
 
 def main(argv=None):
@@ -158,19 +202,26 @@ def main(argv=None):
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
     if now.tzinfo is None: now = now.replace(tzinfo=mc.ET)
     wl = wlm.load(a.watchlist); state = load_state(a.state)
+    warn = state.pop("warning", None)
     quotes = {}
     for t in wl["tickers"]:
         try: quotes[t["symbol"]] = qt.get_quote(t["symbol"], a.provider, a.fixture)
         except Exception as e: quotes[t["symbol"]] = {"error": str(e)}
     res = run(wl, state, quotes, now, a.force_session)
+    if warn:
+        res["state_warning"] = warn
     if not a.dry_run and not res["skipped"]: save_state(state, a.state)
     if a.format == "json":
         print(json.dumps(res, indent=2))
     else:
         et = now.astimezone(mc.ET)
+        if warn:
+            print(f"WARN {warn}", file=sys.stderr)
         if res["skipped"]: print(f"[{et:%Y-%m-%d %H:%M} ET] session={res['session']} - outside alert sessions, nothing checked")
         elif not res["alerts"]: print(f"[{et:%Y-%m-%d %H:%M} ET] no new alerts")
         for x in res["alerts"]: print(f"ALERT {x['message']}")
+        if res.get("truncated"):
+            print(f"WARN alert cap ({(wl.get('settings') or {}).get('max_alerts_per_run', DEFAULTS['max_alerts_per_run'])}) reached; remaining alerts left unlatched", file=sys.stderr)
         for e in res["errors"]: print(f"WARN {e['symbol']}: {e['error']}", file=sys.stderr)
     return 0
 

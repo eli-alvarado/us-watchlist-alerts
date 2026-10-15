@@ -1,0 +1,20 @@
+name: Good first issue
+description: Small, well-scoped work for a new contributor
+labels: ["good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this if you are **proposing** a starter task, or converting a larger idea into one. See [CONTRIBUTING.md](https://github.com/eli-alvarado/us-watchlist-alerts/blob/main/CONTRIBUTING.md) for the current list.
+  - type: textarea
+    id: task
+    attributes:
+      label: Task
+      description: One change, plus how to test it (`python3 -m unittest discover -s tests`).
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: Likely files
+      placeholder: scripts/market_calendar.py, tests/test_all.py

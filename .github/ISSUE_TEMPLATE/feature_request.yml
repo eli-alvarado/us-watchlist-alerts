@@ -1,0 +1,27 @@
+name: Feature request
+description: A new alert type, provider, or agent-install path
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This repo stays US-listed, stdlib-first, and **never places trades**. Requests that need auto-execution belong in a broker skill (for example gauss314's Alpaca skill), not here.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is missing
+    validations:
+      required: true
+  - type: textarea
+    id: extra
+    attributes:
+      label: Why it belongs here
+      description: Who uses it, and whether it still works with no API keys.
+  - type: dropdown
+    id: size
+    attributes:
+      label: Size
+      options:
+        - Small (docs or one function)
+        - Medium (new alert type or provider field)
+        - Large (new skill or data source)

@@ -17,7 +17,8 @@ Informational tool only. **Never place, modify, or cancel a trade.** Editing the
 {
   "version": 1,
   "settings": { "cooldown_minutes": 240, "rearm_pct": 0.5, "sessions": ["regular"],
-                "volume_spike_multiple": 2.0, "near_52w_pct": 2.0, "earnings_days": 3, "max_alerts_per_run": 20 },
+                "volume_spike_multiple": 2.0, "near_52w_pct": 2.0, "earnings_days": 3,
+                "max_alerts_per_run": 20, "extra_closures": [] },
   "tickers": [{
     "symbol": "NVDA",            // required, uppercase; class shares as BRK.B or BRK-B
     "side": "long",              // long | short | watch
@@ -55,7 +56,9 @@ If Python is unavailable, edit the JSON by hand following the schema and the val
 
 ## Validation rules
 - Symbol matches `^[A-Z]{1,5}([.-][A-Z]{1,2})?$`; no duplicates.
-- `entry`, `stop`, `targets[]` are numbers. For `side: long`, stop < entry.
+- `entry`, `stop`, `targets[]` are numbers. For `side: long`, stop < entry; for `side: short`, stop > entry.
+- `settings.sessions` if present is a non-empty list of `regular` / `pre` / `after`.
+- `settings.extra_closures` if present is ISO dates (`YYYY-MM-DD`) for unscheduled full-day closures.
 - Every alert `type` is a known type.
 
 ## Listing format

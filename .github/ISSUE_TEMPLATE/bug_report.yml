@@ -1,0 +1,52 @@
+name: Bug report
+description: Something incorrect in quotes, alerts, calendar, or docs
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks. Please run `python3 -m unittest discover -s tests` if you can, and say whether this is live data or the fixture suite.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      placeholder: Actual vs expected (paste ALERT lines, a brief, or a traceback).
+    validations:
+      required: true
+  - type: input
+    id: cmd
+    attributes:
+      label: Command
+      placeholder: python3 scripts/alerts.py --force-session
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - price-alerts / alerts.py
+        - watchlist-manager / watchlist.py
+        - watchlist-brief / brief.py
+        - quotes / providers
+        - NYSE calendar
+        - docs / skills
+        - install / agent
+    validations:
+      required: true
+  - type: input
+    id: py
+    attributes:
+      label: Python version
+      placeholder: "3.12"
+  - type: input
+    id: agent
+    attributes:
+      label: Agent (if relevant)
+      placeholder: Claude Code, Codex, Cursor, Gemini CLI, other
+  - type: checkboxes
+    id: live
+    attributes:
+      label: Data
+      options:
+        - label: Reproduced offline with `tests/fixtures/`
+        - label: Happened on live Yahoo / yfinance / keyed provider
+        - label: I can share a redacted watchlist.json

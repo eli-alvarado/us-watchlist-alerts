@@ -14,29 +14,58 @@ def row(t, q):
     closes = (q.get("closes") or [])[:-1] + [p]
     r = ind.rsi(closes); s50 = ind.sma(closes, 50); s200 = ind.sma(closes, 200)
     trend = "n/a" if not (s50 and s200) else ("up (50>200)" if s50 > s200 else "down (50<200)")
-    stop = t.get("stop"); dist = f"{(p - stop) / p * 100:+.1f}%" if stop else "-"
-    tg = (t.get("targets") or [None])[0]; to_t = f"{(tg - p) / p * 100:+.1f}%" if tg else "-"
+    stop = t.get("stop"); side = t.get("side", "long")
+    # Positive % = cushion remaining before the stop / distance still to target 1.
+    if stop:
+        cushion = (stop - p) / p * 100 if side == "short" else (p - stop) / p * 100
+        dist = f"{cushion:+.1f}%"
+    else:
+        dist = "-"
+    tg = (t.get("targets") or [None])[0]
+    if tg:
+        to_go = (p - tg) / p * 100 if side == "short" else (tg - p) / p * 100
+        to_t = f"{to_go:+.1f}%"
+    else:
+        to_t = "-"
     return f"| {t['symbol']} | ${p:,.2f} | {chg:+.2f}% | {'-' if r is None else f'{r:.0f}'} | {trend} | {dist} | {to_t} |", chg
 
 
 def render(wl, quotes, kind, now):
     et = now.astimezone(mc.ET)
+    extra = mc.parse_dates((wl.get("settings") or {}).get("extra_closures"))
     lines = [f"# Watchlist {kind} brief - {et:%a %b %d, %Y %I:%M %p} ET", ""]
-    if not mc.is_trading_day(et.date()):
-        lines += [f"_Market closed today. Next session: {mc.next_trading_day(et.date()):%a %b %d}._", ""]
+    if not mc.is_trading_day(et.date(), extra=extra):
+        why = mc.holiday_name(et.date(), extra=extra) or ("weekend" if et.weekday() >= 5 else "closed")
+        nxt = mc.next_trading_day(et.date(), extra=extra)
+        lines += [f"_Market closed today ({why}). Next session: {nxt:%a %b %d}._", ""]
     lines += ["| Ticker | Price | Chg | RSI14 | Trend | To stop | To target 1 |", "|---|---|---|---|---|---|---|"]
     movers, errs = [], []
+    sources = set()
     for t in wl["tickers"]:
         q = quotes.get(t["symbol"])
         if not q or "error" in q: errs.append(t["symbol"]); continue
+        if q.get("source"): sources.add(q["source"])
         line, chg = row(t, q); lines.append(line); movers.append((abs(chg), t["symbol"], chg))
     movers.sort(reverse=True)
     if movers:
         lines += ["", "**Biggest movers:** " + ", ".join(f"{s} {c:+.1f}%" for _, s, c in movers[:3])]
-    earn = [f"{s} ({str(q['earnings_date'])[:10]})" for s, q in quotes.items() if q.get("earnings_date")]
-    if earn: lines.append("**Earnings dates:** " + ", ".join(earn))
+    today = et.date()
+    earn = []
+    for s, q in quotes.items():
+        if not q or q.get("error") or not q.get("earnings_date"):
+            continue
+        try:
+            d = dt.date.fromisoformat(str(q["earnings_date"])[:10])
+        except ValueError:
+            continue
+        if d >= today:
+            earn.append((d, f"{s} ({d.isoformat()})"))
+    earn.sort()
+    if earn:
+        lines.append("**Earnings dates:** " + ", ".join(x for _, x in earn))
     if errs: lines.append("**Data unavailable:** " + ", ".join(errs))
-    lines += ["", "_Informational only - not financial advice._"]
+    src = ", ".join(sorted(sources)) if sources else "unknown"
+    lines += ["", f"_Data: {src}. Informational only - not financial advice._"]
     return "\n".join(lines)
 
 
@@ -46,6 +75,8 @@ def main(argv=None):
     ap.add_argument("--provider", default="auto"); ap.add_argument("--now")
     a = ap.parse_args(argv)
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=mc.ET)
     wl = wlm.load(a.watchlist); quotes = {}
     for t in wl["tickers"]:
         try: quotes[t["symbol"]] = qt.get_quote(t["symbol"], a.provider, a.fixture)

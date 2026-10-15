@@ -40,20 +40,29 @@ Any rule may set `cooldown_minutes` to override `settings.cooldown_minutes`.
 - **Level alerts latch**: once fired they stay silent until price moves back through the level by `rearm_pct` (default 0.5%). A stock hovering at $240 never pings repeatedly.
 - **Daily-event alerts** fire at most once per trading day per ticker/type.
 - **Cooldown** (`cooldown_minutes`, default 240) applies to every re-fire.
-- **Cap** of `max_alerts_per_run` (default 20). If many fire, summarize ("7 alerts, 4 on TSLA") rather than dumping walls of text.
+- **Cap** of `max_alerts_per_run` (default 20). Alerts past the cap are **not** written to state, so they can fire on the next run. If many fire, summarize ("7 alerts, 4 on TSLA") rather than dumping walls of text.
 - If the state file is missing or corrupt, start fresh but warn the user that duplicates are possible on this run.
+- Each `targets[]` level is its own latched `target_hit` (T1 firing does not hide T2).
 
 ## Market hours (America/New_York, handled by `scripts/market_calendar.py`)
 - Pre-market 04:00-09:30, regular 09:30-16:00, after-hours 16:00-20:00 ET; early-close days (day after Thanksgiving, Christmas Eve, July 3 when a weekday) close 13:00 with after-hours to 17:00.
-- NYSE holidays: New Year's (not observed when Saturday), MLK, Presidents', Good Friday, Memorial, Juneteenth, Independence, Labor, Thanksgiving, Christmas (Sat -> Fri, Sun -> Mon). Unscheduled closures (e.g. national days of mourning) are not known - mention it if quotes look stale.
+- NYSE holidays: New Year's (not observed when Saturday), MLK, Presidents', Good Friday, Memorial, Juneteenth, Independence, Labor, Thanksgiving, Christmas (Sat -> Fri, Sun -> Mon). Unscheduled closures (e.g. national days of mourning) are not in the table — set `NYSE_EXTRA_CLOSURES=YYYY-MM-DD,...` or `settings.extra_closures`. Mention it if quotes look stale on a weekday the calendar thinks is open.
 - `settings.sessions` controls when alerts run; default `["regular"]`. Add `"pre"`/`"after"` for extended hours - note extended-hours quotes are thinner and free sources may lag.
 - Always state times in ET (add the user's local time if known, e.g. "10:05 ET / 9:05 CT").
 
 ## Data sources (`scripts/quotes.py`, auto-fallback in this order)
-1. `yfinance` if installed (`pip install yfinance`) - also provides earnings dates.
-2. Yahoo public chart endpoint (no key, stdlib only).
-3. Alpaca (`ALPACA_API_KEY_ID`, `ALPACA_API_SECRET_KEY`), Finnhub (`FINNHUB_API_KEY`), Alpha Vantage (`ALPHAVANTAGE_API_KEY`).
+1. `--fixture` path, if given (tests/demos only).
+2. `yfinance` if installed (`pip install yfinance`) — daily history **and** earnings dates.
+3. Yahoo public chart API (stdlib, unofficial, best-effort): `query1.finance.yahoo.com`, then `query2`.
+4. Alpaca snapshot, if `ALPACA_API_KEY_ID` **and** `ALPACA_API_SECRET_KEY` are set (latest trade; **no** history, so MA / RSI / 52-week / earnings alerts will not fire).
+5. Finnhub quote, if `FINNHUB_API_KEY` is set (same history limitation as Alpaca).
+6. Alpha Vantage daily, if `ALPHAVANTAGE_API_KEY` is set (history, no earnings date).
+
 Force one with `--provider` or `WATCHLIST_PROVIDER`. Free data can be delayed ~15 min; say so when precision matters.
+
+**Earnings dates** come from yfinance only. Yahoo / Alpaca / Finnhub / Alpha Vantage leave `earnings_date` null, so `earnings_within` will not fire unless yfinance is installed.
+
+**Known limits:** the holiday calendar is rule-based and does not know unscheduled closures (set `NYSE_EXTRA_CLOSURES` or `settings.extra_closures`). The Yahoo endpoint is unofficial and can change or rate-limit. See `docs/LIMITATIONS.md`.
 
 **MCP option:** if an `alpaca` MCP server (alpacahq/alpaca-mcp-server) or `tradingview` MCP (atilaahmettaner/tradingview-mcp) is connected, you may use it for quotes/indicators instead of the scripts, then apply the exact same rules and anti-spam logic (read/write `.alert_state.json` in the same format). Use broker MCPs for **read-only** calls only.
 

@@ -1,4 +1,5 @@
-import copy, datetime as dt, json, os, sys, tempfile, unittest
+import copy, datetime as dt, json, os, sys, tempfile, unittest, warnings
+from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import alerts, brief, indicators as ind, market_calendar as mc, quotes as qt, watchlist as wlm
@@ -34,6 +35,19 @@ class Calendar(unittest.TestCase):
         self.assertEqual(mc.session(dt.datetime(2026, 10, 15, 14, 0, tzinfo=dt.timezone.utc)), "regular")
     def test_next_trading_day(self):
         self.assertEqual(mc.next_trading_day(dt.date(2026, 11, 25)), dt.date(2026, 11, 27))
+    def test_holiday_name(self):
+        self.assertEqual(mc.holiday_name(dt.date(2026, 11, 26)), "Thanksgiving Day")
+        self.assertIsNone(mc.holiday_name(dt.date(2026, 10, 15)))
+    def test_extra_closures_env(self):
+        d = dt.date(2026, 10, 15)
+        self.assertTrue(mc.is_trading_day(d))
+        with mock.patch.dict(os.environ, {"NYSE_EXTRA_CLOSURES": "2026-10-15"}):
+            self.assertFalse(mc.is_trading_day(d))
+            self.assertEqual(mc.session(T("2026-10-15T10:00")), "closed")
+            self.assertEqual(mc.holiday_name(d), "unscheduled closure")
+            self.assertEqual(mc.next_trading_day(dt.date(2026, 10, 14)), dt.date(2026, 10, 16))
+    def test_extra_closures_arg(self):
+        self.assertFalse(mc.is_trading_day(dt.date(2026, 10, 15), extra=["2026-10-15"]))
 
 
 class Indicators(unittest.TestCase):
@@ -43,6 +57,15 @@ class Indicators(unittest.TestCase):
         self.assertLess(ind.rsi(list(range(30, 1, -1))), 1)
     def test_golden_cross_fixture(self):
         self.assertEqual(ind.ma_cross(quotes()["NVDA"]["closes"]), "golden")
+    def test_death_cross(self):
+        # SMAs equal on the prior bar; last close pulls SMA50 below SMA200.
+        closes = [10.0] * 200 + [0.0]
+        self.assertEqual(ind.ma_cross(closes, 50, 200), "death")
+    def test_price_cross_ma(self):
+        below = [1.0] * 50 + [3.0]
+        self.assertEqual(ind.price_cross_ma(below, 50), "above")
+        above = [3.0] * 50 + [1.0]
+        self.assertEqual(ind.price_cross_ma(above, 50), "below")
 
 
 class Watchlist(unittest.TestCase):
@@ -65,11 +88,23 @@ class Watchlist(unittest.TestCase):
         self.assertTrue(any("unknown alert" in e for e in errs))
         self.assertTrue(any("stop" in e for e in errs))
         self.assertEqual(wlm.validate(wlm.load(WL)), [])
+    def test_short_stop_must_be_above_entry(self):
+        wl = {"tickers": [{"symbol": "AAPL", "side": "short", "entry": 200, "stop": 180}]}
+        self.assertTrue(any("short" in e for e in wlm.validate(wl)))
+        wl["tickers"][0]["stop"] = 220
+        self.assertEqual(wlm.validate(wl), [])
+    def test_sessions_and_extra_closures_validated(self):
+        self.assertTrue(any("sessions" in e for e in wlm.validate({"settings": {"sessions": ["overnight"]}, "tickers": []})))
+        self.assertTrue(any("extra_closures" in e for e in wlm.validate({"settings": {"extra_closures": ["not-a-date"]}, "tickers": []})))
+        self.assertEqual(wlm.validate({"settings": {"sessions": ["regular"], "extra_closures": ["2026-01-09"]}, "tickers": []}), [])
     def test_class_shares_symbol(self):
         self.assertTrue(wlm.SYMBOL_RE.match("BRK.B")); self.assertTrue(wlm.SYMBOL_RE.match("BF-B"))
     def test_cli(self):
         self.assertIsNone(wlm.main(["--file", self.p, "add", "AMD", "--entry", "150", "--stop", "130", "--tag", "semis"]))
         self.assertEqual(wlm.main(["--file", self.p, "validate"]), 0)
+        with mock.patch("sys.stderr"):
+            self.assertEqual(wlm.main(["--file", self.p, "show", "NOPE"]), 1)
+            self.assertEqual(wlm.main(["--file", self.p, "remove", "NOPE"]), 1)
 
 
 class Alerts(unittest.TestCase):
@@ -87,6 +122,12 @@ class Alerts(unittest.TestCase):
         res = alerts.run(self.wl, {"fired": {}}, self.q, T("2026-10-17T10:00"))
         self.assertTrue(res["skipped"]); self.assertEqual(res["alerts"], [])
         self.assertFalse(alerts.run(self.wl, {"fired": {}}, self.q, T("2026-10-17T10:00"), force_session=True)["skipped"])
+    def test_extra_closure_skips_session(self):
+        wl = copy.deepcopy(self.wl)
+        wl["settings"]["extra_closures"] = ["2026-10-15"]
+        res = alerts.run(wl, {"fired": {}}, self.q, T("2026-10-15T10:00"))
+        self.assertTrue(res["skipped"])
+        self.assertEqual(res["session"], "closed")
     def test_dedupe_and_cooldown(self):
         st = {"fired": {}}
         first = alerts.run(self.wl, st, self.q, T("2026-10-15T10:00"))["alerts"]
@@ -112,22 +153,179 @@ class Alerts(unittest.TestCase):
         res = alerts.run(wl, {"fired": {}}, self.q, T("2026-10-15T10:00"))
         self.assertIn("stop_hit", self.types(res, "AAPL"))
         self.assertIn("target_hit", self.types(res, "NVDA"))
+    def test_target_hit_nearest_then_further(self):
+        """Price through T1 and T2 must report T1 (nearest), then T2 on a later run after T1 is latched."""
+        q = {"AAPL": {"price": 155, "prev_close": 150, "closes": [150] * 30, "source": "fixture"}}
+        wl = {"tickers": [{"symbol": "AAPL", "side": "long", "targets": [140, 160]}]}
+        st = {"fired": {}}
+        first = alerts.run(wl, st, q, T("2026-10-15T10:00"))
+        keys = [a["key"] for a in first["alerts"] if a["type"] == "target_hit"]
+        self.assertEqual(keys, ["AAPL|target_hit:140"])
+        q["AAPL"]["price"] = 165
+        second = alerts.run(wl, st, q, T("2026-10-15T10:05"))
+        keys2 = [a["key"] for a in second["alerts"] if a["type"] == "target_hit"]
+        self.assertEqual(keys2, ["AAPL|target_hit:160"])
+    def test_short_target_hit(self):
+        q = {"AAPL": {"price": 90, "prev_close": 100, "closes": [100] * 5, "source": "fixture"}}
+        wl = {"tickers": [{"symbol": "AAPL", "side": "short", "targets": [95, 80], "stop": 110}]}
+        res = alerts.run(wl, {"fired": {}}, q, T("2026-10-15T10:00"))
+        self.assertIn("AAPL|target_hit:95", [a["key"] for a in res["alerts"]])
+        self.assertNotIn("AAPL|target_hit:80", [a["key"] for a in res["alerts"]])
+    def test_max_alerts_does_not_latch_unreported(self):
+        wl = {"settings": {"max_alerts_per_run": 1},
+              "tickers": [{"symbol": "AAPL", "alerts": [{"type": "price_above", "value": 1}]},
+                          {"symbol": "NVDA", "alerts": [{"type": "price_above", "value": 1}]}]}
+        st = {"fired": {}}
+        first = alerts.run(wl, st, self.q, T("2026-10-15T10:00"))
+        self.assertEqual(len(first["alerts"]), 1)
+        self.assertTrue(first.get("truncated"))
+        self.assertEqual(first["alerts"][0]["symbol"], "AAPL")
+        self.assertNotIn("NVDA|price_above:1", st["fired"])
+        second = alerts.run(wl, st, self.q, T("2026-10-15T10:01"))
+        self.assertEqual([a["symbol"] for a in second["alerts"]], ["NVDA"])
     def test_missing_quote_reported(self):
         wl = {"tickers": [{"symbol": "ZZZZ", "alerts": [{"type": "price_above", "value": 1}]}]}
         res = alerts.run(wl, {"fired": {}}, {"ZZZZ": {"error": "not found"}}, T("2026-10-15T10:00"))
         self.assertEqual(res["errors"][0]["symbol"], "ZZZZ")
+    def test_corrupt_state_starts_fresh(self):
+        d = tempfile.mkdtemp(); st = os.path.join(d, "s.json")
+        with open(st, "w") as f:
+            f.write("{not json")
+        loaded = alerts.load_state(st)
+        self.assertEqual(loaded["fired"], {})
+        self.assertIn("warning", loaded)
+        with open(st, "w") as f:
+            json.dump(["nope"], f)
+        self.assertEqual(alerts.load_state(st)["fired"], {})
     def test_cli_state_file(self):
         d = tempfile.mkdtemp(); st = os.path.join(d, "s.json")
         alerts.main(["--watchlist", WL, "--state", st, "--fixture", FX, "--now", "2026-10-15T10:00:00-04:00"])
-        self.assertTrue(json.load(open(st))["fired"])
+        with open(st) as f:
+            self.assertTrue(json.load(f)["fired"])
+    def test_save_state_closes_handle(self):
+        d = tempfile.mkdtemp(); st = os.path.join(d, "s.json")
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            alerts.save_state({"fired": {"X": {"at": "t"}}}, st)
+        self.assertFalse(any(issubclass(w.category, ResourceWarning) for w in caught))
+        with open(st) as f:
+            self.assertIn("X", json.load(f)["fired"])
 
 
 class Brief(unittest.TestCase):
     def test_render(self):
         out = brief.render(wlm.load(WL), quotes(), "morning", T("2026-10-15T08:30"))
         self.assertIn("| AAPL |", out); self.assertIn("Biggest movers", out); self.assertIn("not financial advice", out)
+        self.assertIn("Earnings dates:", out)
+        self.assertIn("Data: fixture", out)
     def test_closed_day_note(self):
-        self.assertIn("Market closed", brief.render(wlm.load(WL), quotes(), "morning", T("2026-11-26T08:30")))
+        out = brief.render(wlm.load(WL), quotes(), "morning", T("2026-11-26T08:30"))
+        self.assertIn("Market closed", out)
+        self.assertIn("Thanksgiving", out)
+    def test_past_earnings_omitted(self):
+        q = quotes()
+        q["AAPL"]["earnings_date"] = "2020-01-01"
+        q["TSLA"]["earnings_date"] = "2026-10-16"
+        q["NVDA"]["earnings_date"] = None
+        out = brief.render(wlm.load(WL), q, "morning", T("2026-10-15T08:30"))
+        self.assertNotIn("AAPL (2020-01-01)", out)
+        self.assertIn("TSLA (2026-10-16)", out)
+    def test_short_stop_cushion_sign(self):
+        t = {"symbol": "AAPL", "side": "short", "stop": 250, "targets": [200]}
+        q = {"price": 241.5, "prev_close": 240, "closes": [200] * 30}
+        line, _ = brief.row(t, q)
+        # stop is above price for a short → positive cushion
+        self.assertIn("+3.5%", line)
+
+
+class Quotes(unittest.TestCase):
+    def test_fixture_roundtrip(self):
+        q = qt.get_quote("AAPL", fixture=FX)
+        self.assertEqual(q["source"], "fixture")
+        self.assertAlmostEqual(q["price"], 241.5)
+        self.assertIsNotNone(q["avg_volume_20d"] or True)
+    def test_missing_fixture_symbol(self):
+        with self.assertRaises(KeyError):
+            qt.from_fixture("ZZZZ", FX)
+    def test_unknown_provider(self):
+        with self.assertRaises(RuntimeError) as ctx:
+            qt.get_quote("AAPL", provider="nope")
+        self.assertIn("unknown provider", str(ctx.exception))
+    def test_auto_order_optional_keys(self):
+        env = {"ALPACA_API_KEY_ID": "id"}  # secret missing → alpaca skipped
+        with mock.patch.dict(os.environ, env, clear=False):
+            os.environ.pop("ALPACA_API_SECRET_KEY", None)
+            os.environ.pop("FINNHUB_API_KEY", None)
+            os.environ.pop("ALPHAVANTAGE_API_KEY", None)
+            order = qt.auto_order()
+        self.assertIn("yahoo", order)
+        self.assertNotIn("alpaca", order)
+    def test_aligned_ohlcv_drops_null_closes(self):
+        closes, vols, opens, n = qt._aligned_ohlcv({
+            "close": [1.0, None, 3.0],
+            "volume": [10, 99, 30],
+            "open": [0.9, 2.0, 2.9],
+        })
+        self.assertEqual(closes, [1.0, 3.0])
+        self.assertEqual(vols, [10, 30])
+        self.assertEqual(n, 3)
+        self.assertEqual(opens, [0.9, 2.9])
+    def test_yahoo_prefers_meta_previous_close(self):
+        payload = {
+            "chart": {"result": [{
+                "meta": {
+                    "regularMarketPrice": 10.5,
+                    "chartPreviousClose": 10.0,
+                    "regularMarketOpen": 10.1,
+                    "regularMarketDayHigh": 11,
+                    "regularMarketDayLow": 9.9,
+                    "regularMarketVolume": 1000,
+                    "fiftyTwoWeekHigh": 12,
+                    "fiftyTwoWeekLow": 8,
+                },
+                "indicators": {"quote": [{"close": [9.0, 10.0, 10.5], "volume": [1, 2, 3], "open": [9, 10, 10.1]}]},
+            }]}
+        }
+        with mock.patch.object(qt, "_get", return_value=payload):
+            q = qt.from_yahoo("AAPL")
+        self.assertEqual(q["prev_close"], 10.0)
+        self.assertEqual(q["open"], 10.1)
+        self.assertEqual(q["source"], "yahoo-chart")
+        self.assertEqual(q["price"], 10.5)
+    def test_yahoo_retries_query2(self):
+        payload = {
+            "chart": {"result": [{
+                "meta": {"regularMarketPrice": 1, "chartPreviousClose": 1, "regularMarketOpen": 1},
+                "indicators": {"quote": [{"close": [1, 1], "volume": [1, 1], "open": [1, 1]}]},
+            }]}
+        }
+        with mock.patch.object(qt, "_get", side_effect=[OSError("blocked"), payload]) as g:
+            q = qt.from_yahoo("AAPL")
+        self.assertEqual(q["price"], 1)
+        self.assertEqual(g.call_count, 2)
+        self.assertIn("query2.finance.yahoo.com", g.call_args_list[1][0][0])
+    def test_finish_rejects_empty_price(self):
+        with self.assertRaises(RuntimeError):
+            qt._finish({"symbol": "X", "price": None, "closes": [], "source": "x"})
+    def test_earnings_date_helpers(self):
+        self.assertEqual(qt._first_iso_date("2026-10-29 00:00:00-04:00"), "2026-10-29")
+        self.assertEqual(qt._first_iso_date([dt.date(2026, 10, 29)]), "2026-10-29")
+        self.assertEqual(qt._first_iso_date(dt.datetime(2026, 10, 29, 16, 0)), "2026-10-29")
+        class Ticker:
+            calendar = {"Earnings Date": [dt.date(2026, 11, 1)]}
+            earnings_dates = None
+        self.assertEqual(qt._yfinance_earnings_date(Ticker()), "2026-11-01")
+        class Loc:
+            def __getitem__(self, key):
+                return dt.date(2026, 12, 1)
+        class Frame:
+            loc = Loc()
+            index = ["Earnings Date"]
+            columns = []
+        class Ticker2:
+            calendar = Frame()
+            earnings_dates = None
+        self.assertEqual(qt._yfinance_earnings_date(Ticker2()), "2026-12-01")
 
 
 if __name__ == "__main__":

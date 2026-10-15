@@ -1,0 +1,83 @@
+# Growth plan
+
+How this repo gets in front of people who would actually use it, without pretending it is a 70-skill trading terminal.
+
+## Positioning
+
+One sentence: **stdlib US watchlist + anti-spam price alerts + NYSE hours, for any agent that reads `SKILL.md`.**
+
+Complementary to, not a clone of:
+
+- [tradermonty/claude-trading-skills](https://github.com/tradermonty/claude-trading-skills) — research / screening / journaling
+- [himself65/finance-skills](https://github.com/himself65/finance-skills) — valuation and market analysis
+- [gauss314/skills](https://github.com/gauss314/skills) — data adapters and **order execution**
+- [chjm-ai/stock-monitor-skill](https://github.com/chjm-ai/stock-monitor-skill) — China A-shares (this repo is the US analog)
+
+Lead with "no keys, no MCP, will not auto-trade."
+
+## Skill directories and marketplaces
+
+Submit or list, in this order:
+
+1. **Claude Code plugin marketplace** — already has `.claude-plugin/marketplace.json`. Document `/plugin marketplace add eli-alvarado/us-watchlist-alerts` then `/plugin install us-watchlist-alerts`.
+2. **skills.sh / `npx skills add`** — register `eli-alvarado/us-watchlist-alerts` so one command installs into Claude Code, Cursor, Codex, Gemini CLI, Copilot.
+3. **Cursor skill listings** — `.cursor/skills/` path is in the README; submit if Cursor publishes a directory.
+4. **Claude.ai skill zip** — GitHub release assets of `skills/watchlist-manager`, `skills/price-alerts`, `skills/watchlist-brief` (plus a note that scripts must sit next to the clone).
+5. **OpenClaw / agent skill catalogs** — same `SKILL.md` layout; HEARTBEAT.md is the scheduler hook.
+6. **Gemini CLI extensions / Codex plugin lists** as they stabilize; until then keep `~/.gemini/skills` and `~/.codex/skills` instructions accurate.
+
+Do not split the three skills across marketplaces. Alerts without the watchlist schema are incomplete.
+
+## Awesome-lists to submit to
+
+Open a small, polite PR (one bullet, honest scope) on:
+
+| List | Why |
+|---|---|
+| [VoltAgent/awesome-agent-skills](https://github.com/VoltAgent/awesome-agent-skills) | Cross-agent, curated; finance/productivity section |
+| [ComposioHQ/awesome-claude-skills](https://github.com/ComposioHQ/awesome-claude-skills) | Large Claude-oriented catalog |
+| [travisvn/awesome-claude-skills](https://github.com/travisvn/awesome-claude-skills) | Claude Code workflows |
+| [philipbankier/awesome-agent-skills](https://github.com/philipbankier/awesome-agent-skills) | Cross-platform (SKILL.md + Cursor + OpenClaw) |
+| [sindresorhus/awesome](https://github.com/sindresorhus/awesome) | Only after a child list exists; do not spam the parent |
+
+Skip bulk-generated "thousands of skills" scrapers unless they accept a single well-described repo. When filing, link CI, the comparison table, and LIMITATIONS.md so reviewers can see it is not vapor.
+
+## Launch posts
+
+Keep each post to: what it does, what it refuses to do, fixture demo GIF, install one-liner.
+
+- **Show HN** — title like *Show HN: Agent skills for a US stock watchlist with de-duplicated price alerts*. Comment: stdlib, Yahoo unofficial, no auto-trade.
+- **Reddit** — r/ClaudeAI, r/codex, r/cursor, r/LocalLLaMA (agent-skills angle), r/algotrading (expect "why not a real broker API" — answer: this is the heartbeat layer, pair with Alpaca if you execute). Avoid sounding like a signal service.
+- **X** — short demo GIF thread; tag agent-skills / Claude Code / Gemini CLI, not ticker hype.
+- **HN "Ask"** only if there is a real question (how should agents handle broker confirmation?). Prefer Show HN.
+
+Time the post after a **GitHub release** (`v0.1.0`) so the README badge and tag exist.
+
+## Credibility work
+
+- [x] CI on Python 3.10–3.13 (`python3 -m unittest discover -s tests`)
+- [x] CONTRIBUTING.md, issue templates, limitations doc
+- [ ] **GitHub release v0.1.0** once this lands on `main`
+- [ ] File 3–5 **good first issues** (see CONTRIBUTING.md) so the repo looks open, not a dump
+- [ ] Pin a discussion or README FAQ: delayed data, unofficial Yahoo, no China listings
+- [ ] After a few users: add `CHANGELOG.md` and a `v0.2.0` tag rather than silent main commits
+- [ ] Optional: `pre-commit` only if it stays one ruff/format hook — do not bury contributors in tooling
+
+## Roadmap
+
+### v0.2 — make the current loop trustworthy
+
+- Tagged GitHub release and CI badge on the default branch.
+- Pin a small `holidays_overrides.json` (or documented extra-closures examples) for known future/past special closures without claiming completeness.
+- Earnings: if `FINNHUB_API_KEY` is set, use Finnhub’s earnings calendar as a fallback when yfinance has no date.
+- Quote object remains a dict, but document every field in one table (already started in LIMITATIONS.md); add a `--stale-after` warning when `as_of` is old during regular hours.
+- Keep unittest; do not require pytest yet.
+
+### v0.3 — still no auto-trade
+
+- Optional notify sink (write a markdown snippet or JSON line) so HEARTBEAT can be cron + `ntfy`/email **without** the agent placing orders.
+- Intraday range alerts only when a keyed provider actually returns them; refuse to fake them from delayed daily bars.
+- Multi-watchlist files (`WATCHLIST_FILE` already exists — document profiles: swing vs long).
+- International listings stay out of scope unless someone owns the calendar and a legal data source.
+
+Out of scope on purpose: CANSLIM, DCF, options payoff, live order entry. Point at the comparison table instead of growing into a junk drawer.

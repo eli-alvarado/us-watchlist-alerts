@@ -17,6 +17,8 @@ ALERT_TYPES = {"price_above", "price_below", "pct_change_up", "pct_change_down",
                "gap_down", "new_52w_high", "new_52w_low", "near_52w_high", "near_52w_low", "golden_cross",
                "death_cross", "cross_above_ma", "cross_below_ma", "rsi_above", "rsi_below", "volume_spike",
                "earnings_within", "stop_hit", "target_hit"}
+SESSIONS = {"regular", "pre", "after"}
+SIDES = {"long", "short", "watch"}
 DEFAULT_PATH = os.environ.get("WATCHLIST_FILE", "watchlist.json")
 
 
@@ -29,8 +31,15 @@ def load(path=DEFAULT_PATH):
     with open(path) as f:
         if _is_yaml(path):
             import yaml
-            return yaml.safe_load(f) or {"version": SCHEMA_VERSION, "tickers": []}
-        return json.load(f)
+            data = yaml.safe_load(f) or {}
+        else:
+            data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError("watchlist root must be an object")
+    data.setdefault("version", SCHEMA_VERSION)
+    data.setdefault("settings", {})
+    data.setdefault("tickers", [])
+    return data
 
 
 def save(wl, path=DEFAULT_PATH):
@@ -60,18 +69,35 @@ def validate(wl):
     errs = []
     if not isinstance(wl.get("tickers"), list):
         return ["'tickers' must be a list"]
+    settings = wl.get("settings") or {}
+    if settings.get("sessions") is not None:
+        sess = settings["sessions"]
+        if not isinstance(sess, list) or not sess or any(x not in SESSIONS for x in sess):
+            errs.append("settings.sessions must be a non-empty list of regular/pre/after")
+    if settings.get("extra_closures") is not None:
+        try:
+            for d in settings["extra_closures"]:
+                dt.date.fromisoformat(str(d)[:10])
+        except (TypeError, ValueError):
+            errs.append("settings.extra_closures must be ISO dates (YYYY-MM-DD)")
     seen = set()
     for i, t in enumerate(wl["tickers"]):
         s = t.get("symbol", "")
         if not SYMBOL_RE.match(s): errs.append(f"tickers[{i}]: bad symbol {s!r}")
         if s in seen: errs.append(f"duplicate symbol {s}")
         seen.add(s)
+        side = t.get("side", "long")
+        if side not in SIDES:
+            errs.append(f"{s}: side must be long, short, or watch")
         for k in ("entry", "stop"):
             if t.get(k) is not None and not isinstance(t[k], (int, float)): errs.append(f"{s}: {k} must be a number")
         for x in t.get("targets", []) or []:
             if not isinstance(x, (int, float)): errs.append(f"{s}: targets must be numbers")
-        if t.get("stop") is not None and t.get("entry") is not None and t.get("side", "long") == "long" and t["stop"] >= t["entry"]:
-            errs.append(f"{s}: stop {t['stop']} should be below entry {t['entry']} for a long")
+        if t.get("stop") is not None and t.get("entry") is not None:
+            if side == "long" and t["stop"] >= t["entry"]:
+                errs.append(f"{s}: stop {t['stop']} should be below entry {t['entry']} for a long")
+            if side == "short" and t["stop"] <= t["entry"]:
+                errs.append(f"{s}: stop {t['stop']} should be above entry {t['entry']} for a short")
         for a in t.get("alerts", []) or []:
             if a.get("type") not in ALERT_TYPES: errs.append(f"{s}: unknown alert type {a.get('type')!r}")
     return errs
@@ -135,12 +161,22 @@ def main(argv=None):
         kw = {k: getattr(a, k) for k in ("thesis", "entry", "stop", "targets", "tags", "side", "notes")}
         kw["alerts"] = [parse_alert(x) for x in (a.alerts or [])]
         if a.cmd == "update": kw["append"] = a.append
-        t = (add if a.cmd == "add" else update)(wl, a.symbol, **kw)
+        try:
+            t = (add if a.cmd == "add" else update)(wl, a.symbol, **kw)
+        except (ValueError, KeyError) as e:
+            print(e, file=sys.stderr); return 1
         save(wl, a.file); print(json.dumps(t, indent=2))
     elif a.cmd == "remove":
-        t = remove(wl, a.symbol); save(wl, a.file); print(f"removed {t['symbol']}")
+        try:
+            t = remove(wl, a.symbol)
+        except KeyError as e:
+            print(f"{e.args[0]} not on watchlist", file=sys.stderr); return 1
+        save(wl, a.file); print(f"removed {t['symbol']}")
     elif a.cmd == "show":
-        print(json.dumps(find(wl, a.symbol), indent=2))
+        t = find(wl, a.symbol)
+        if not t:
+            print(f"{a.symbol.upper()} not on watchlist", file=sys.stderr); return 1
+        print(json.dumps(t, indent=2))
     elif a.cmd == "list":
         for t in wl["tickers"]:
             if a.tag and a.tag not in t.get("tags", []): continue
