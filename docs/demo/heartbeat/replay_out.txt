@@ -1,0 +1,102 @@
+REPLAYED DATA — replay-yahoo-15m
+REPLAYED — not a live feed. 15-minute Yahoo chart bars for 2026-10-15 (query1, range=5d, interval=15m, includePrePost=true), pulled 2026-10-15 ~18:57 ET. prev_close is Yahoo previo…
+
+=== WITH skill (latch + daily once + session gate) ===
+  09:30  ALERT AAPL $345.89 is above $340.00
+  09:30  ALERT NVDA session low $213.12 is -3.70% vs prior close
+  09:45  ALERT NVDA down -3.26% today
+  10:00  session=regular  (silent)
+  10:15  session=regular  (silent)
+  10:30  session=regular  (silent)
+  10:45  session=regular  (silent)
+  11:00  session=regular  (silent)
+  11:15  session=regular  (silent)
+  11:30  session=regular  (silent)
+  11:45  session=regular  (silent)
+  12:00  session=regular  (silent)
+  12:15  session=regular  (silent)
+  12:30  session=regular  (silent)
+  12:45  session=regular  (silent)
+  13:00  session=regular  (silent)
+  13:15  session=regular  (silent)
+  13:30  session=regular  (silent)
+  13:45  session=regular  (silent)
+  14:00  session=regular  (silent)
+  14:15  session=regular  (silent)
+  14:30  session=regular  (silent)
+  14:45  session=regular  (silent)
+  15:00  session=regular  (silent)
+  15:15  session=regular  (silent)
+  15:30  session=regular  (silent)
+  15:45  session=regular  (silent)
+  16:00  session=after last_close  (silent)
+  16:15  session=after last_close  (silent)
+  18:30  session=after last_close  (silent)
+  10:00 Sat  skip session=closed (weekend)
+  total new alerts: 3
+
+=== WITHOUT skill (fresh evaluate every tick, no state, no session gate) ===
+  09:30  ALERT AAPL $345.89 is above $340.00
+  09:30  ALERT NVDA session low $213.12 is -3.70% vs prior close
+  09:45  ALERT AAPL $345.14 is above $340.00
+  09:45  ALERT NVDA down -3.26% today
+  09:45  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  10:00  ALERT AAPL $345.21 is above $340.00
+  10:00  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  10:15  ALERT AAPL $344.89 is above $340.00
+  10:15  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  10:30  ALERT AAPL $344.68 is above $340.00
+  10:30  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  10:45  ALERT AAPL $344.78 is above $340.00
+  10:45  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  11:00  ALERT AAPL $344.05 is above $340.00
+  11:00  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  11:15  ALERT AAPL $344.00 is above $340.00
+  11:15  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  11:30  ALERT AAPL $342.94 is above $340.00
+  11:30  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  11:45  ALERT AAPL $343.20 is above $340.00
+  11:45  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  12:00  ALERT AAPL $343.29 is above $340.00
+  12:00  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  12:15  ALERT AAPL $343.78 is above $340.00
+  12:15  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  12:30  ALERT AAPL $344.34 is above $340.00
+  12:30  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  12:45  ALERT AAPL $343.82 is above $340.00
+  12:45  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  13:00  ALERT AAPL $344.85 is above $340.00
+  13:00  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  13:15  ALERT AAPL $344.45 is above $340.00
+  13:15  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  13:30  ALERT AAPL $344.29 is above $340.00
+  13:30  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  13:45  ALERT AAPL $343.63 is above $340.00
+  13:45  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  14:00  ALERT AAPL $342.70 is above $340.00
+  14:00  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  14:15  ALERT AAPL $341.97 is above $340.00
+  14:15  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  14:30  ALERT AAPL $342.33 is above $340.00
+  14:30  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  14:45  ALERT AAPL $342.48 is above $340.00
+  14:45  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  15:00  ALERT AAPL $342.95 is above $340.00
+  15:00  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  15:15  ALERT AAPL $342.95 is above $340.00
+  15:15  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  15:30  ALERT AAPL $342.45 is above $340.00
+  15:30  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  15:45  ALERT AAPL $341.91 is above $340.00
+  15:45  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  16:00  ALERT AAPL $342.00 is above $340.00
+  16:00  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  16:15  ALERT AAPL $341.80 is above $340.00
+  16:15  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  18:30  ALERT AAPL $341.49 is above $340.00
+  18:30  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  10:00 Sat  ALERT AAPL $341.49 is above $340.00
+  10:00 Sat  ALERT NVDA session low $212.85 is -3.82% vs prior close
+  total alerts: 61
+
+wrote /workspace/docs/demo/heartbeat/replay_report.json

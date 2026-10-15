@@ -1,6 +1,6 @@
 # With vs. without the skill
 
-Live before-and-after. Same model, same clock, same starting `watchlist.json`. Answers are **unedited** agent output.
+**Lead with the heartbeat:** recurring 15-minute checks are where the skill wins. Replayed Yahoo tape + counts: [heartbeat/](heartbeat/) (**3 alerts with state, 61 without**). One-shot live transcripts below are still honest — a capable agent without the skill is fine on a single turn.
 
 | | |
 |---|---|

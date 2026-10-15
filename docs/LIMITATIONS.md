@@ -81,9 +81,13 @@ Skipped (the rule does not fire) when IV is missing or `0`. This is **not** IV r
 
 Nearest-expiry can be **0DTE**. After the bell on expiration day that print can look implausibly tight (SPY printed ~1.8% on 2026-10-15). We do not invent the next expiry when Yahoo only returns today's chain.
 
-## Intraday range
+## Intraday range and session extremes
 
 `intraday_range_pct` is `(day_high - day_low) / prev_close * 100` (falls back to `day_low` if `prev_close` is missing). If the provider omitted `day_high`/`day_low`, the rule is silent. Daily `closes` are never used as a substitute.
+
+**Default % moves (`pct_change_up` / `pct_change_down` / `pct_move`) use last vs prior close.** After the bell that last is the regular close. A session low that recovered (NVDA 2026-10-15: low −3.82%, close −1.84%) does **not** fire `pct_change_down: 3`.
+
+**Opt-in session extremes:** `intraday_low_pct` / `intraday_high_pct` / alias `intraday_extreme_pct` compare `day_low` / `day_high` to prior close. Same skip if high/low are missing. Once per trading day. Not added unless the user asks.
 
 ## Alert delivery
 

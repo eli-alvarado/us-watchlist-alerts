@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.3 — 2026-10-15
 
-- **With vs. without demo** (`docs/demo/`): live 2026-10-15 after-hours transcripts (Cursor Grok 4.6). Unedited. The without-skill agent did fine on quotes and the NYSE calendar; the skill’s edge is persist + session labeling + evaluating the rest of the book.
+- **Opt-in session extremes:** `intraday_low_pct` / `intraday_high_pct` / alias `intraday_extreme_pct` fire on session low or high vs prior close. Default `pct_change_*` remains last vs prior close (a recovered low does not fire). Docs say this plainly.
+- **Heartbeat replay demo** (`docs/demo/heartbeat/`): replayed Yahoo 15-minute bars for 2026-10-15. Same rules every tick: **3 alerts with the skill, 61 without** (no latch, no weekend skip). README with-vs-without now leads with this.
 
 ## 0.3.2 — 2026-10-15
 

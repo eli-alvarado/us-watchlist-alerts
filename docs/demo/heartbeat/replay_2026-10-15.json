@@ -1,0 +1,1062 @@
+{
+  "_comment": "REPLAYED \u2014 not a live feed. 15-minute Yahoo chart bars for 2026-10-15 (query1, range=5d, interval=15m, includePrePost=true), pulled 2026-10-15 ~18:57 ET. prev_close is Yahoo previousClose (not chartPreviousClose). day_high/day_low are running extremes of those 15m bars from 04:00 ET. Saturday 2026-10-17 10:00 ET reuses Friday's last snapshot to show the weekend skip.",
+  "pulled_at": "2026-10-15T22:57:00+00:00",
+  "source": "replay-yahoo-15m",
+  "prev_close": {
+    "AAPL": 342.96,
+    "NVDA": 221.3,
+    "SPY": 769.6
+  },
+  "ticks": [
+    {
+      "now": "2026-10-15T09:30:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 345.89,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 344.03,
+          "volume": 5152760,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T09:30:00-04:00"
+        },
+        "NVDA": {
+          "price": 215.565,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 213.12,
+          "volume": 23872013,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T09:30:00-04:00"
+        },
+        "SPY": {
+          "price": 766.82,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 768.25,
+          "day_low": 764.1,
+          "volume": 5105686,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T09:30:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T09:45:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 345.14,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 344.03,
+          "volume": 2078636,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T09:45:00-04:00"
+        },
+        "NVDA": {
+          "price": 214.08,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 9000823,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T09:45:00-04:00"
+        },
+        "SPY": {
+          "price": 765.45,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 768.25,
+          "day_low": 764.1,
+          "volume": 2649818,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T09:45:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T10:00:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 345.215,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 344.03,
+          "volume": 17723309,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:00:00-04:00"
+        },
+        "NVDA": {
+          "price": 215.535,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 6293372,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:00:00-04:00"
+        },
+        "SPY": {
+          "price": 767.225,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 768.25,
+          "day_low": 764.1,
+          "volume": 2247099,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:00:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T10:15:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 344.895,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 344.03,
+          "volume": 1140206,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:15:00-04:00"
+        },
+        "NVDA": {
+          "price": 216.12,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 46990235,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:15:00-04:00"
+        },
+        "SPY": {
+          "price": 767.37,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 768.25,
+          "day_low": 764.1,
+          "volume": 11543269,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:15:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T10:30:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 344.68,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 344.03,
+          "volume": 943403,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:30:00-04:00"
+        },
+        "NVDA": {
+          "price": 216.75,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 5198335,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:30:00-04:00"
+        },
+        "SPY": {
+          "price": 768.985,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 769.29,
+          "day_low": 764.1,
+          "volume": 1347234,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:30:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T10:45:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 344.78,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 344.03,
+          "volume": 1104690,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:45:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.04,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 155968927,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:45:00-04:00"
+        },
+        "SPY": {
+          "price": 769.62,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 769.7,
+          "day_low": 764.1,
+          "volume": 1690003,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T10:45:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T11:00:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 344.0499,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 343.9545,
+          "volume": 800578,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:00:00-04:00"
+        },
+        "NVDA": {
+          "price": 216.95,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 59873877,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:00:00-04:00"
+        },
+        "SPY": {
+          "price": 770.64,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 770.87,
+          "day_low": 764.1,
+          "volume": 1554318,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:00:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T11:15:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 344.0,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.87,
+          "volume": 14025061,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:15:00-04:00"
+        },
+        "NVDA": {
+          "price": 216.7606,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 4319625,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:15:00-04:00"
+        },
+        "SPY": {
+          "price": 770.3,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.23,
+          "day_low": 764.1,
+          "volume": 1536590,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:15:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T11:30:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 342.935,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 1198862,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:30:00-04:00"
+        },
+        "NVDA": {
+          "price": 216.75,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 65474234,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:30:00-04:00"
+        },
+        "SPY": {
+          "price": 769.88,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.23,
+          "day_low": 764.1,
+          "volume": 863916,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:30:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T11:45:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 343.2,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 606837,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:45:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.7363,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 3354782,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:45:00-04:00"
+        },
+        "SPY": {
+          "price": 770.41,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.23,
+          "day_low": 764.1,
+          "volume": 18936620,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T11:45:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T12:00:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 343.29,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 16095194,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:00:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.3,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 2707346,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:00:00-04:00"
+        },
+        "SPY": {
+          "price": 769.6,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.23,
+          "day_low": 764.1,
+          "volume": 38598609,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:00:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T12:15:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 343.78,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 532763,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:15:00-04:00"
+        },
+        "NVDA": {
+          "price": 216.3099,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 72301611,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:15:00-04:00"
+        },
+        "SPY": {
+          "price": 769.34,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.23,
+          "day_low": 764.1,
+          "volume": 864892,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:15:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T12:30:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 344.34,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 2282779,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:30:00-04:00"
+        },
+        "NVDA": {
+          "price": 216.988,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 1949579,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:30:00-04:00"
+        },
+        "SPY": {
+          "price": 770.09,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.23,
+          "day_low": 764.1,
+          "volume": 1004629,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:30:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T12:45:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 343.82,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 402226,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:45:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.36,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 1595738,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:45:00-04:00"
+        },
+        "SPY": {
+          "price": 769.9,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.23,
+          "day_low": 764.1,
+          "volume": 453506,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T12:45:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T13:00:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 344.85,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 751065,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:00:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.5193,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 1641389,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:00:00-04:00"
+        },
+        "SPY": {
+          "price": 770.2602,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.23,
+          "day_low": 764.1,
+          "volume": 467531,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:00:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T13:15:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 344.455,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 696765,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:15:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.385,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 1794761,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:15:00-04:00"
+        },
+        "SPY": {
+          "price": 770.37,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.23,
+          "day_low": 764.1,
+          "volume": 409131,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:15:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T13:30:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 344.285,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 491353,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:30:00-04:00"
+        },
+        "NVDA": {
+          "price": 218.16,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 2134964,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:30:00-04:00"
+        },
+        "SPY": {
+          "price": 771.45,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.91,
+          "day_low": 764.1,
+          "volume": 842391,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:30:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T13:45:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 343.63,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 595015,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:45:00-04:00"
+        },
+        "NVDA": {
+          "price": 218.06,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 1832047,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:45:00-04:00"
+        },
+        "SPY": {
+          "price": 771.33,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.91,
+          "day_low": 764.1,
+          "volume": 717372,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T13:45:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T14:00:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 342.705,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 342.56,
+          "volume": 692952,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:00:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.0,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 1973240,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:00:00-04:00"
+        },
+        "SPY": {
+          "price": 769.6607,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.91,
+          "day_low": 764.1,
+          "volume": 946065,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:00:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T14:15:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 341.97,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.77,
+          "volume": 715006,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:15:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.1,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 1685173,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:15:00-04:00"
+        },
+        "SPY": {
+          "price": 769.56,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.91,
+          "day_low": 764.1,
+          "volume": 734935,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:15:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T14:30:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 342.335,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.77,
+          "volume": 565003,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:30:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.0599,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 2201516,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:30:00-04:00"
+        },
+        "SPY": {
+          "price": 769.87,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.91,
+          "day_low": 764.1,
+          "volume": 716729,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:30:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T14:45:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 342.4827,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.77,
+          "volume": 417331,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:45:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.5875,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 1769847,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:45:00-04:00"
+        },
+        "SPY": {
+          "price": 770.63,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 771.91,
+          "day_low": 764.1,
+          "volume": 598643,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T14:45:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T15:00:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 342.95,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.77,
+          "volume": 646337,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:00:00-04:00"
+        },
+        "NVDA": {
+          "price": 218.2058,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 2936560,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:00:00-04:00"
+        },
+        "SPY": {
+          "price": 772.335,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 772.375,
+          "day_low": 764.1,
+          "volume": 1188978,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:00:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T15:15:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 342.95,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.77,
+          "volume": 617419,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:15:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.705,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 3043589,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:15:00-04:00"
+        },
+        "SPY": {
+          "price": 772.08,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 772.87,
+          "day_low": 764.1,
+          "volume": 1924430,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:15:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T15:30:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 342.45,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.6,
+          "volume": 976467,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:30:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.235,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 5153961,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:30:00-04:00"
+        },
+        "SPY": {
+          "price": 772.23,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 772.87,
+          "day_low": 764.1,
+          "volume": 1331663,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:30:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T15:45:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 341.91,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.6,
+          "volume": 2621680,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:45:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.24,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 7645309,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:45:00-04:00"
+        },
+        "SPY": {
+          "price": 771.71,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 772.87,
+          "day_low": 764.1,
+          "volume": 5713153,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T15:45:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T16:00:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 342.0,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.6,
+          "volume": 6218211,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T16:00:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.603,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 11924768,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T16:00:00-04:00"
+        },
+        "SPY": {
+          "price": 771.7,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 772.87,
+          "day_low": 764.1,
+          "volume": 1029099,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T16:00:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T16:15:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 341.8,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.6,
+          "volume": 0,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T16:15:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.49,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 0,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T16:15:00-04:00"
+        },
+        "SPY": {
+          "price": 771.39,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 772.87,
+          "day_low": 764.1,
+          "volume": 0,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T16:15:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-15T18:30:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 341.49,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.33,
+          "volume": 0,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T18:30:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.5041,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 0,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T18:30:00-04:00"
+        },
+        "SPY": {
+          "price": 771.605,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 772.87,
+          "day_low": 764.1,
+          "volume": 0,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-15T18:30:00-04:00"
+        }
+      }
+    },
+    {
+      "now": "2026-10-17T10:00:00-04:00",
+      "quotes": {
+        "AAPL": {
+          "price": 341.49,
+          "prev_close": 342.96,
+          "open": 346.5,
+          "day_high": 347.85,
+          "day_low": 341.33,
+          "volume": 0,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-17T10:00:00-04:00"
+        },
+        "NVDA": {
+          "price": 217.5041,
+          "prev_close": 221.3,
+          "open": 218.58,
+          "day_high": 219.97,
+          "day_low": 212.85,
+          "volume": 0,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-17T10:00:00-04:00"
+        },
+        "SPY": {
+          "price": 771.605,
+          "prev_close": 769.6,
+          "open": 767.31,
+          "day_high": 772.87,
+          "day_low": 764.1,
+          "volume": 0,
+          "source": "replay-yahoo-15m",
+          "as_of": "2026-10-17T10:00:00-04:00"
+        }
+      }
+    }
+  ]
+}

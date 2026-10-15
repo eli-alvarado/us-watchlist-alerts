@@ -57,7 +57,7 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 
 - [x] CI on Python 3.10–3.13 (`python3 -m unittest discover -s tests`)
 - [x] CONTRIBUTING.md, issue templates, limitations doc
-- [x] CHANGELOG.md (0.1.0 … 0.3.2)
+- [x] CHANGELOG.md (0.1.0 … 0.3.3)
 - [x] GitHub release v0.2.0
 - [ ] File 3–5 **good first issues** (see CONTRIBUTING.md) so the repo looks open, not a dump
 - [ ] Pin a discussion or README FAQ: delayed data, unofficial Yahoo, no China listings
@@ -84,6 +84,7 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 - [x] Cache Alpaca calendar on disk for the ET day so HEARTBEAT ticks do not hit `/v2/calendar` every 15 minutes
 - [x] Demo GIF showing notify
 - [x] v0.3.2: `npx skills add` ships `scripts/` (no extra clone); after-hours last-close without `--force-session`; Yahoo crumb + Nasdaq earnings / IV degrade
+- [x] v0.3.3: opt-in `intraday_low_pct` / `intraday_extreme_pct`; heartbeat replay demo (3 vs 61 alerts)
 - International listings stay out of scope unless someone owns the calendar and a legal data source.
 
 ### v0.4 — still no auto-trade

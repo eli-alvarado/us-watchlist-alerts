@@ -17,7 +17,8 @@ ALERT_TYPES = {"price_above", "price_below", "pct_change_up", "pct_change_down",
                "gap_down", "new_52w_high", "new_52w_low", "near_52w_high", "near_52w_low", "golden_cross",
                "death_cross", "cross_above_ma", "cross_below_ma", "rsi_above", "rsi_below", "volume_spike",
                "earnings_within", "stop_hit", "target_hit",
-               "iv_above", "iv_below", "intraday_range_pct"}
+               "iv_above", "iv_below", "intraday_range_pct",
+               "intraday_low_pct", "intraday_high_pct", "intraday_extreme_pct"}
 SESSIONS = {"regular", "pre", "after"}
 SIDES = {"long", "short", "watch"}
 DEFAULT_PATH = os.environ.get("WATCHLIST_FILE", "watchlist.json")

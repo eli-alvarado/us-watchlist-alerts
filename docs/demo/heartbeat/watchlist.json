@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "settings": {
+    "cooldown_minutes": 240,
+    "rearm_pct": 0.5,
+    "sessions": ["regular"],
+    "max_alerts_per_run": 20,
+    "timezone_display": "America/New_York"
+  },
+  "tickers": [
+    {
+      "symbol": "AAPL",
+      "side": "watch",
+      "added": "2026-10-15",
+      "thesis": "Replay: hover above 340",
+      "alerts": [
+        {"type": "price_above", "value": 340}
+      ]
+    },
+    {
+      "symbol": "NVDA",
+      "side": "watch",
+      "added": "2026-10-15",
+      "thesis": "Replay: session low vs last print",
+      "alerts": [
+        {"type": "pct_change_down", "value": 3},
+        {"type": "intraday_low_pct", "value": 3}
+      ]
+    },
+    {
+      "symbol": "SPY",
+      "side": "watch",
+      "added": "2026-10-15",
+      "thesis": "Replay: no 3% move",
+      "alerts": [
+        {"type": "pct_change_down", "value": 3},
+        {"type": "intraday_low_pct", "value": 3}
+      ]
+    }
+  ]
+}

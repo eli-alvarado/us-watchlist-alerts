@@ -27,7 +27,7 @@ Output: `ALERT <message>` lines, or `no new alerts`, or `market closed, showing 
 | `price_above` / `price_below` | price | last >= / <= value | level |
 | `stop_hit` | price (default: ticker `stop`) | long: last <= stop; short: last >= stop | level (implicit if `stop` set) |
 | `target_hit` | - | last crosses any `targets` entry | level (implicit if `targets` set) |
-| `pct_change_up` / `pct_change_down` / `pct_move` | % | change vs prior close >= value | daily |
+| `pct_change_up` / `pct_change_down` / `pct_move` | % | **last** vs prior close (after hours: last regular close). A recovered session low does **not** fire | daily |
 | `gap_up` / `gap_down` | % (default 2) | open vs prior close | daily |
 | `new_52w_high` / `new_52w_low` | - | last beyond prior 252-session range | daily |
 | `near_52w_high` / `near_52w_low` | % (default settings.near_52w_pct) | within value% of 52w extreme | daily-ish (level latch) |
@@ -38,8 +38,12 @@ Output: `ALERT <message>` lines, or `no new alerts`, or `market closed, showing 
 | `volume_spike` | multiple (default 2.0) | today's volume >= value x 20-day avg | daily |
 | `earnings_within` | days (default 3) | next earnings date within N days | daily |
 | `intraday_range_pct` | % | `(day_high-day_low)/prev_close`; skip if high/low missing | daily |
+| `intraday_low_pct` / `intraday_high_pct` | % | **opt-in** session low/high vs prior close. Catches a −3% low that recovered into the close | daily |
+| `intraday_extreme_pct` | % | alias: expands to both `intraday_low_pct` and `intraday_high_pct` | daily |
 
 Any rule may set `cooldown_minutes` to override `settings.cooldown_minutes`.
+
+**Default % checks use last print vs prior close** (`pct_change_*` / `pct_move`). They do not look at the session high/low. If the user says “alert me if it drops 3% today” and they mean the print that traded through 3% even if it bounced, add `intraday_low_pct` (or `intraday_extreme_pct`). Do not add those unless they ask — they are opt-in.
 
 ## Anti-spam rules (implemented in `scripts/alerts.py`, state in `.alert_state.json`)
 - **Level alerts latch**: once fired they stay silent until price moves back through the level by `rearm_pct` (default 0.5%). A stock hovering at $240 never pings repeatedly. `iv_*` rearms when ATM IV no longer breaches the threshold.

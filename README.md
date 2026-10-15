@@ -14,25 +14,41 @@ Demo above is **offline**, driven by `tests/fixtures/` (the same data CI uses). 
 
 ## With vs. without the skill
 
-Live A/B on **2026-10-15 ~18:50 ET** (after the regular close) with **Cursor Grok 4.6**. Same starting `watchlist.json`. Isolated subagents: one folder had only the JSON, the other had `npx`-style skills under `.agents/skills/`. Transcripts are unedited in [`docs/demo/`](docs/demo/).
+The skill’s job is a **15-minute heartbeat**, not a one-shot quote. A capable agent without it can fetch Yahoo and the NYSE calendar. What it usually does not have is latch + once-per-day + a session gate that survive the next turn.
 
-The without-skill agent **did fine** on every prompt — live Yahoo prints, correct % vs prior close, official NYSE calendar in the browser. The skill is not “the only way to get a quote.” What changed:
+### Recurring monitor (where the skill wins)
 
-| Prompt | Without the skill | With the skill | Difference |
-|---|---|---|---|
-| Watch AAPL, NVDA, SPY and alert me if any drops 3% today | No 3% close-to-close drop. Also flagged NVDA’s session low **−3.82%** that recovered | Same last prints; persisted `pct_change_down:3`; last-close banner; also fired existing target / 52w / $240 rules | **Clearest.** Heartbeat + persist vs one-shot research. Skill ignores a recovered intraday low; without reported it |
-| Give me a morning brief on my watchlist | Long per-ticker recap (AH prints, P/E, hand-checked rules), still titled “morning” | Refused the morning label (`session=after`), ran `brief.py --kind close` | Session honesty vs a richer essay |
-| Is the market open tomorrow? | Yes — Fri 2026-10-16, 09:30–16:00 ET (NYSE web) | Yes — same, from `market_calendar.py` | Agree |
-| Is the market open on Friday, November 27, 2026? | Yes, **early close 1:00 PM ET** (NYSE page; also options 1:15 / late 5:00) | Yes, **early close 1:00 PM ET** (local calendar; after-hours to 17:00) | Agree on equities; without had more venue detail |
+**Replayed** Yahoo 15-minute bars for **2026-10-15** (plus a Saturday tick). Same three rules every check: AAPL `price_above 340`, NVDA/SPY `pct_change_down: 3` and opt-in `intraday_low_pct: 3`. Offline: `python3 docs/demo/heartbeat/replay.py`.
 
-Full replies, command logs, and side-by-side images: [docs/demo/README.md](docs/demo/README.md).
+![Replayed heartbeat: 3 alerts with the skill, 61 without](docs/demo/heartbeat/side-by-side.png)
+
+| | **With** `.alert_state.json` + NYSE gate | **Without** (fresh evaluate every tick, no state, no session skip) |
+|---|---|---|
+| 09:30 | AAPL above $340 (once). NVDA session low −3.70% | Same two alerts |
+| 09:45 | NVDA last −3.26% (once) | AAPL above $340 **again**; NVDA last −3.26%; NVDA low **again** |
+| 10:00–15:45 | silent (23 ticks) | AAPL above $340 **and** NVDA low **every 15 min** |
+| After the bell | last-close, silent | still fires AAPL $340 and NVDA low |
+| Saturday 10:00 | skip (`weekend`) | still fires both |
+| **Total** | **3 alerts** | **61 alerts** |
+
+Default `%` rules are still **last vs prior close**. The 09:30 NVDA low (−3.70%) is opt-in `intraday_low_pct`; `pct_change_down` waited until 09:45 when last itself was −3.26%, then stayed quiet after the bounce. Full log and fixture: [docs/demo/heartbeat/](docs/demo/heartbeat/).
+
+### One-shot prompts (2026-10-15 ~18:50 ET, Cursor Grok 4.6)
+
+Unedited transcripts in [`docs/demo/`](docs/demo/). The without-skill agent **did fine** on a single turn — live prints, official NYSE page. It also caught NVDA’s recovered session low that `pct_change_down` ignores; that is why `intraday_low_pct` exists and is **opt-in**.
+
+| Prompt | Without | With |
+|---|---|---|
+| Alert if AAPL/NVDA/SPY drops 3% today | No close-to-close 3% drop; noted NVDA low **−3.82%** | Same last prints; persisted rules; last-close banner; other book alerts |
+| Morning brief | Long recap, still titled “morning” after the bell | Close brief (`session=after`) |
+| Market open tomorrow? / Nov 27 2026? | Regular Friday / early close 1:00 PM ET (NYSE web) | Same answers from `market_calendar.py` |
 
 ## What's inside
 
 | Skill | What it does |
 |---|---|
 | [`watchlist-manager`](skills/watchlist-manager/SKILL.md) | Add, remove, update, list and validate tickers with thesis, entry, targets, stop, tags and alert rules (JSON/YAML schema) |
-| [`price-alerts`](skills/price-alerts/SKILL.md) | 23 alert types, latching, cooldowns, once-per-day events, session gating, NYSE calendar, optional notify sinks |
+| [`price-alerts`](skills/price-alerts/SKILL.md) | 26 alert types, latching, cooldowns, once-per-day events, session gating, NYSE calendar, optional notify sinks |
 | [`watchlist-brief`](skills/watchlist-brief/SKILL.md) | Morning or close summary: table, movers, distance to stop/target, upcoming earnings |
 | [`HEARTBEAT.md`](HEARTBEAT.md) | Checklist for a scheduled check that stays silent unless something new happens |
 
@@ -297,7 +313,8 @@ Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 - **Level alerts** (price, stop, target, RSI, ATM IV) latch after firing and re-arm only after the condition clears (price/IV hysteresis via `rearm_pct` for price levels).
 - Each **target** is its own latch, so hitting T1 does not hide T2.
-- **Event alerts** (gaps, % moves, volume, crosses, 52-week highs/lows, earnings, intraday range) fire at most once per trading day.
+- **Event alerts** (gaps, % moves, volume, crosses, 52-week highs/lows, earnings, intraday range / opt-in session extremes) fire at most once per trading day.
+- **Default % checks are last vs prior close.** `pct_change_down: 3` ignores a session low that recovered. Opt-in `intraday_low_pct` / `intraday_extreme_pct` if you want the extreme.
 - A **cooldown** applies to every re-fire. `max_alerts_per_run` caps what is printed; omitted alerts are **not** latched, so the next run can emit them.
 
 ## Limitations
@@ -305,7 +322,7 @@ Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 - **Unscheduled closures** use a bundled list (`data/holidays_overrides.json`, incomplete), plus env/settings overrides, plus an optional Alpaca official calendar overlay (day-cached). The rule-based table still does not invent mourning days on its own.
 - **Earnings dates** no longer require yfinance, but Yahoo/Finnhub/AV calendars can be wrong or empty. Confirm against issuer IR.
 - The **Yahoo chart / quoteSummary / options endpoints are unofficial** and best-effort. They can change, rate-limit, or return delayed quotes (~15 minutes). ATM IV is nearest-expiry only; there is no IV rank.
-- `intraday_range_pct` needs provider `day_high`/`day_low`. It will not fake a range from the daily close series.
+- `intraday_range_pct` and `intraday_*_pct` need provider `day_high`/`day_low`. They will not fake a range from the daily close series. `pct_change_*` still uses last vs prior close only.
 - Alpaca/Finnhub history depends on bars/candles succeeding; if those calls fail, MA/RSI/52-week rules will not fire even though the last price is present.
 - US-listed equities and ETFs only. No order routing. `notify-send` is Linux-only; use ntfy on macOS/Windows.
 

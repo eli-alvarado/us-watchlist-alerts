@@ -1,0 +1,464 @@
+{
+  "source": "replay-yahoo-15m",
+  "comment": "REPLAYED \u2014 not a live feed. 15-minute Yahoo chart bars for 2026-10-15 (query1, range=5d, interval=15m, includePrePost=true), pulled 2026-10-15 ~18:57 ET. prev_close is Yahoo previousClose (not chartPreviousClose). day_high/day_low are running extremes of those 15m bars from 04:00 ET. Saturday 2026-10-17 10:00 ET reuses Friday's last snapshot to show the weekend skip.",
+  "with_skill": [
+    {
+      "now": "2026-10-15T09:30:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": [
+        "AAPL $345.89 is above $340.00",
+        "NVDA session low $213.12 is -3.70% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T09:45:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": [
+        "NVDA down -3.26% today"
+      ]
+    },
+    {
+      "now": "2026-10-15T10:00:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T10:15:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T10:30:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T10:45:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T11:00:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T11:15:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T11:30:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T11:45:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T12:00:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T12:15:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T12:30:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T12:45:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T13:00:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T13:15:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T13:30:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T13:45:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T14:00:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T14:15:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T14:30:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T14:45:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T15:00:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T15:15:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T15:30:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T15:45:00-04:00",
+      "session": "regular",
+      "skipped": false,
+      "last_close": null,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T16:00:00-04:00",
+      "session": "after",
+      "skipped": false,
+      "last_close": true,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T16:15:00-04:00",
+      "session": "after",
+      "skipped": false,
+      "last_close": true,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-15T18:30:00-04:00",
+      "session": "after",
+      "skipped": false,
+      "last_close": true,
+      "reason": null,
+      "alerts": []
+    },
+    {
+      "now": "2026-10-17T10:00:00-04:00",
+      "session": "closed",
+      "skipped": true,
+      "last_close": null,
+      "reason": "weekend",
+      "alerts": []
+    }
+  ],
+  "without_skill": [
+    {
+      "now": "2026-10-15T09:30:00-04:00",
+      "alerts": [
+        "AAPL $345.89 is above $340.00",
+        "NVDA session low $213.12 is -3.70% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T09:45:00-04:00",
+      "alerts": [
+        "AAPL $345.14 is above $340.00",
+        "NVDA down -3.26% today",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T10:00:00-04:00",
+      "alerts": [
+        "AAPL $345.21 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T10:15:00-04:00",
+      "alerts": [
+        "AAPL $344.89 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T10:30:00-04:00",
+      "alerts": [
+        "AAPL $344.68 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T10:45:00-04:00",
+      "alerts": [
+        "AAPL $344.78 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T11:00:00-04:00",
+      "alerts": [
+        "AAPL $344.05 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T11:15:00-04:00",
+      "alerts": [
+        "AAPL $344.00 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T11:30:00-04:00",
+      "alerts": [
+        "AAPL $342.94 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T11:45:00-04:00",
+      "alerts": [
+        "AAPL $343.20 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T12:00:00-04:00",
+      "alerts": [
+        "AAPL $343.29 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T12:15:00-04:00",
+      "alerts": [
+        "AAPL $343.78 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T12:30:00-04:00",
+      "alerts": [
+        "AAPL $344.34 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T12:45:00-04:00",
+      "alerts": [
+        "AAPL $343.82 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T13:00:00-04:00",
+      "alerts": [
+        "AAPL $344.85 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T13:15:00-04:00",
+      "alerts": [
+        "AAPL $344.45 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T13:30:00-04:00",
+      "alerts": [
+        "AAPL $344.29 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T13:45:00-04:00",
+      "alerts": [
+        "AAPL $343.63 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T14:00:00-04:00",
+      "alerts": [
+        "AAPL $342.70 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T14:15:00-04:00",
+      "alerts": [
+        "AAPL $341.97 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T14:30:00-04:00",
+      "alerts": [
+        "AAPL $342.33 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T14:45:00-04:00",
+      "alerts": [
+        "AAPL $342.48 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T15:00:00-04:00",
+      "alerts": [
+        "AAPL $342.95 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T15:15:00-04:00",
+      "alerts": [
+        "AAPL $342.95 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T15:30:00-04:00",
+      "alerts": [
+        "AAPL $342.45 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T15:45:00-04:00",
+      "alerts": [
+        "AAPL $341.91 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T16:00:00-04:00",
+      "alerts": [
+        "AAPL $342.00 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T16:15:00-04:00",
+      "alerts": [
+        "AAPL $341.80 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-15T18:30:00-04:00",
+      "alerts": [
+        "AAPL $341.49 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    },
+    {
+      "now": "2026-10-17T10:00:00-04:00",
+      "alerts": [
+        "AAPL $341.49 is above $340.00",
+        "NVDA session low $212.85 is -3.82% vs prior close"
+      ]
+    }
+  ]
+}

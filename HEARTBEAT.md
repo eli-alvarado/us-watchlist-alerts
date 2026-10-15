@@ -8,7 +8,7 @@ Stay **silent** unless there is something new. Never place or modify orders.
    - `pre` / `after` / overnight on a **trading day**: `alerts.py` evaluates last regular close and sets `last_close`. Mention that in the message. Do not require `--force-session`.
    - Unscheduled closures: bundled `data/holidays_overrides.json`, plus `settings.extra_closures` / `NYSE_EXTRA_CLOSURES`. With Alpaca keys, `alerts.py` overlays the official calendar (cached on disk for the ET day). If the user tells you the market is shut and it is not in those lists, add the date and stay silent.
 2. **Watchlist sanity** - `python3 scripts/watchlist.py validate`. If invalid, notify the user once with the errors (don't repeat every tick).
-3. **Alerts** - `python3 scripts/alerts.py --format json` (add `--notify` if `WATCHLIST_NOTIFY` is set so ntfy/Slack/webhook fire without you pasting the JSON).
+3. **Alerts** - `python3 scripts/alerts.py --format json` (add `--notify` if `WATCHLIST_NOTIFY` is set so ntfy/Slack/webhook fire without you pasting the JSON). Default `%` rules are last vs prior close; session-low/high extremes only fire if the watchlist has opt-in `intraday_low_pct` / `intraday_high_pct` / `intraday_extreme_pct`.
    - `alerts` empty -> stay silent. Do not retry notify.
    - Otherwise send ONE message grouped by ticker (format in `skills/price-alerts/SKILL.md`). Include ET time and data source. If notify already delivered, do not duplicate the same text in chat unless the user is sitting in this conversation.
    - `errors` for the same ticker 3 ticks in a row -> tell the user once (possible delisting/typo/provider outage).

@@ -86,6 +86,20 @@ def evaluate_rule(rule, t, q, cfg):
         rng = (hi - lo) / base * 100
         if rng >= v:
             return True, f"{sym} intraday range {rng:.1f}% (H ${hi:.2f} / L ${lo:.2f})", typ
+    if typ == "intraday_low_pct":
+        lo = q.get("day_low")
+        if lo is None or not pc or v is None:
+            return False, "", typ
+        chg_lo = _pct(lo, pc)
+        if chg_lo <= -abs(v):
+            return True, f"{sym} session low ${lo:.2f} is {chg_lo:+.2f}% vs prior close", typ
+    if typ == "intraday_high_pct":
+        hi = q.get("day_high")
+        if hi is None or not pc or v is None:
+            return False, "", typ
+        chg_hi = _pct(hi, pc)
+        if chg_hi >= abs(v):
+            return True, f"{sym} session high ${hi:.2f} is {chg_hi:+.2f}% vs prior close", typ
     if typ == "volume_spike":
         avg = q.get("avg_volume_20d"); vol = q.get("volume"); m = v or cfg["volume_spike_multiple"]
         if avg and vol is not None and vol >= m * avg:
@@ -112,6 +126,10 @@ def _expand_rules(t):
         if r.get("type") == "target_hit" and r.get("value") is None:
             for tg in (t.get("targets") or []):
                 out.append({**r, "value": tg})
+        elif r.get("type") == "intraday_extreme_pct":
+            # Opt-in alias: session low *or* high vs prior close (not last print).
+            out.append({**r, "type": "intraday_low_pct"})
+            out.append({**r, "type": "intraday_high_pct"})
         else:
             out.append(r)
     return out
@@ -161,7 +179,8 @@ def should_emit(state, key, now, cooldown_min, trading_date):
 
 DAILY = {"pct_change_up", "pct_change_down", "pct_move", "gap_up", "gap_down", "volume_spike",
          "new_52w_high", "new_52w_low", "golden_cross", "death_cross", "cross_above_ma", "cross_below_ma",
-         "earnings_within", "intraday_range_pct"}
+         "earnings_within", "intraday_range_pct", "intraday_low_pct", "intraday_high_pct",
+         "intraday_extreme_pct"}
 
 
 def _closed_reason(now, extra):

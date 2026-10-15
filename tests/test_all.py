@@ -742,8 +742,36 @@ class IvAndRangeAlerts(unittest.TestCase):
 
     def test_validate_new_types(self):
         wl = {"tickers": [{"symbol": "AAPL", "alerts": [
-            {"type": "iv_above", "value": 40}, {"type": "intraday_range_pct", "value": 8}]}]}
+            {"type": "iv_above", "value": 40}, {"type": "intraday_range_pct", "value": 8},
+            {"type": "intraday_extreme_pct", "value": 3}]}]}
         self.assertEqual(wlm.validate(wl), [])
+
+    def test_intraday_low_fires_when_last_recovered(self):
+        """NVDA 2026-10-15 shape: session low −3.82%, last only −1.84%."""
+        q = {"NVDA": {"price": 217.23, "prev_close": 221.30, "day_high": 218.47, "day_low": 212.85,
+                      "closes": [221.30], "source": "fixture"}}
+        wl = {"tickers": [{"symbol": "NVDA", "alerts": [
+            {"type": "pct_change_down", "value": 3},
+            {"type": "intraday_low_pct", "value": 3}]}]}
+        res = alerts.run(wl, {"fired": {}}, q, T("2026-10-15T16:00"))
+        types = {a["type"] for a in res["alerts"]}
+        self.assertIn("intraday_low_pct", types)
+        self.assertNotIn("pct_change_down", types)
+        self.assertIn("session low", res["alerts"][0]["message"])
+
+    def test_intraday_extreme_alias_and_once_per_day(self):
+        q = {"AAPL": {"price": 100, "prev_close": 100, "day_high": 104, "day_low": 96,
+                      "closes": [100], "source": "fixture"}}
+        wl = {"tickers": [{"symbol": "AAPL", "alerts": [{"type": "intraday_extreme_pct", "value": 3}]}]}
+        st = {"fired": {}}
+        first = alerts.run(wl, st, q, T("2026-10-15T10:00"))
+        self.assertEqual({a["type"] for a in first["alerts"]}, {"intraday_low_pct", "intraday_high_pct"})
+        self.assertEqual(alerts.run(wl, st, q, T("2026-10-15T15:00"))["alerts"], [])
+
+    def test_intraday_extreme_skips_without_session_range(self):
+        q = {"AAPL": {"price": 90, "prev_close": 100, "closes": [100], "source": "fixture"}}
+        wl = {"tickers": [{"symbol": "AAPL", "alerts": [{"type": "intraday_extreme_pct", "value": 3}]}]}
+        self.assertEqual(alerts.run(wl, {"fired": {}}, q, T("2026-10-15T10:00"))["alerts"], [])
 
     def test_cli_notify_file_not_on_dry_run(self):
         d = tempfile.mkdtemp()
@@ -777,6 +805,25 @@ class SkillBundle(unittest.TestCase):
                 with open(os.path.join(root, n), "rb") as a, open(os.path.join(dest, n), "rb") as b:
                     self.assertEqual(a.read(), b.read(), f"{skill}/scripts/{n} out of sync; run python3 scripts/bundle_skills.py")
             self.assertTrue(os.path.exists(os.path.join(ROOT, "skills", skill, "data", "holidays_overrides.json")))
+
+
+class HeartbeatReplay(unittest.TestCase):
+    def test_replay_with_skill_is_quiet_without_is_spam(self):
+        import importlib.util
+        path = os.path.join(ROOT, "docs", "demo", "heartbeat", "replay.py")
+        spec = importlib.util.spec_from_file_location("hb_replay", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        rep = mod.run()
+        w = sum(len(r["alerts"]) for r in rep["with_skill"])
+        wo = sum(len(r["alerts"]) for r in rep["without_skill"])
+        self.assertEqual(w, 3)
+        self.assertEqual(wo, 61)
+        sat = [r for r in rep["with_skill"] if r["now"].startswith("2026-10-17")]
+        self.assertTrue(sat and sat[0]["skipped"] and sat[0].get("reason") == "weekend")
+        after = [r for r in rep["with_skill"] if r.get("last_close")]
+        self.assertTrue(after)
+        self.assertTrue(all(r["alerts"] == [] for r in after))
 
 
 if __name__ == "__main__":

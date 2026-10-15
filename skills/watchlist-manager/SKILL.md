@@ -51,7 +51,7 @@ If Python is unavailable, edit the JSON by hand following the schema and the val
 1. **Resolve the ticker.** Uppercase it. If the user gives a company name, confirm the symbol (e.g. "Alphabet" -> GOOGL or GOOG?). Reject non-US listings or say they are unsupported by default data.
 2. **Sanity-check with a live quote**: `python scripts/quotes.py NVDA`. If the user's stop is above price for a long (or target below), point it out and ask.
 3. **Capture the why.** If no thesis is given, ask once for a one-line reason; store `""` if they decline. Don't invent a thesis.
-4. **Suggest, don't impose, alerts.** Reasonable defaults to offer: stop/target levels, `earnings_within: 3`, `pct_move: 5`. Mention `iv_above`/`intraday_range_pct` only if the user asks about volatility or today's range — and say ATM IV is unofficial Yahoo, not IV rank. Only add what the user agrees to.
+4. **Suggest, don't impose, alerts.** Reasonable defaults to offer: stop/target levels, `earnings_within: 3`, `pct_move: 5` (last vs prior close). If they want a drop that trades through a % and then recovers, offer opt-in `intraday_low_pct` / `intraday_extreme_pct` and say those use session low/high, not last. Mention `iv_above`/`intraday_range_pct` only if they ask about vol or today's range — ATM IV is unofficial Yahoo, not IV rank. Only add what they agree to.
 5. **Write, validate, confirm.** Show the resulting entry (symbol, entry, stop, targets, alerts) in one compact line.
 
 ## Validation rules
