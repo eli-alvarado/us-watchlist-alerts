@@ -146,7 +146,19 @@ class Alerts(unittest.TestCase):
     def test_skips_outside_session(self):
         res = alerts.run(self.wl, {"fired": {}}, self.q, T("2026-10-17T10:00"))
         self.assertTrue(res["skipped"]); self.assertEqual(res["alerts"], [])
+        self.assertEqual(res.get("reason"), "weekend")
         self.assertFalse(alerts.run(self.wl, {"fired": {}}, self.q, T("2026-10-17T10:00"), force_session=True)["skipped"])
+    def test_after_hours_shows_last_close(self):
+        res = alerts.run(self.wl, {"fired": {}}, self.q, T("2026-10-15T18:30"))
+        self.assertFalse(res["skipped"])
+        self.assertTrue(res.get("last_close"))
+        self.assertEqual(res["session"], "after")
+        self.assertTrue(res["alerts"])
+    def test_overnight_trading_day_shows_last_close(self):
+        res = alerts.run(self.wl, {"fired": {}}, self.q, T("2026-10-15T21:30"))
+        self.assertFalse(res["skipped"])
+        self.assertTrue(res.get("last_close"))
+        self.assertEqual(res["session"], "closed")
     def test_extra_closure_skips_session(self):
         wl = copy.deepcopy(self.wl)
         wl["settings"]["extra_closures"] = ["2026-10-15"]
@@ -235,6 +247,14 @@ class Alerts(unittest.TestCase):
         alerts.main(["--watchlist", WL, "--state", st, "--fixture", FX, "--now", "2026-10-15T10:00:00-04:00"])
         with open(st) as f:
             self.assertTrue(json.load(f)["fired"])
+    def test_cli_after_hours_banner(self):
+        d = tempfile.mkdtemp(); st = os.path.join(d, "s.json")
+        buf = io.StringIO()
+        with mock.patch("sys.stdout", buf):
+            alerts.main(["--watchlist", WL, "--state", st, "--fixture", FX, "--now", "2026-10-15T18:30:00-04:00"])
+        out = buf.getvalue()
+        self.assertIn("market closed, showing last regular close", out)
+        self.assertIn("ALERT", out)
     def test_save_state_closes_handle(self):
         d = tempfile.mkdtemp(); st = os.path.join(d, "s.json")
         with warnings.catch_warnings(record=True) as caught:
@@ -406,11 +426,44 @@ class Quotes(unittest.TestCase):
 
     def test_lookup_earnings_fallback_order(self):
         with mock.patch.object(qt, "earnings_from_yahoo", return_value=None), \
+             mock.patch.object(qt, "earnings_from_yahoo_html", return_value=None), \
+             mock.patch.object(qt, "earnings_from_nasdaq", return_value=None), \
              mock.patch.object(qt, "earnings_from_finnhub", return_value="2026-11-15"), \
              mock.patch.dict(os.environ, {"FINNHUB_API_KEY": "k"}):
             ed, src = qt.lookup_earnings("AAPL")
         self.assertEqual((ed, src), ("2026-11-15", "finnhub"))
         self.assertEqual(qt.lookup_earnings("AAPL", existing="2026-10-01"), ("2026-10-01", "existing"))
+
+    def test_lookup_earnings_nasdaq_before_keys(self):
+        with mock.patch.object(qt, "earnings_from_yahoo", return_value=None), \
+             mock.patch.object(qt, "earnings_from_yahoo_html", return_value=None), \
+             mock.patch.object(qt, "earnings_from_nasdaq", return_value="2026-11-02"):
+            ed, src = qt.lookup_earnings("AAPL")
+        self.assertEqual((ed, src), ("2026-11-02", "nasdaq"))
+
+    def test_earnings_error_is_short(self):
+        msg = qt._summarize_earnings_errors([
+            'yahoo-calendar: yahoo-earnings: {"quoteSummary":{"error":{"code":"Not Found"}}} — HTTP 404',
+            "yahoo-html: no earnings date in quote page for SPY",
+            "nasdaq: no upcoming earnings date for SPY",
+        ])
+        self.assertIn("yahoo-calendar, yahoo-html, nasdaq", msg)
+        self.assertNotIn("quoteSummary", msg)
+        self.assertIn("ETFs", msg)
+        q = {"symbol": "SPY", "price": 1, "source": "yahoo-chart"}
+        with mock.patch.object(qt, "from_yahoo", return_value=dict(q)), \
+             mock.patch.object(qt, "lookup_earnings", side_effect=lambda *a, **k: (
+                 k.get("errors_out", []).extend(["yahoo-calendar: boom"]) or (None, None))):
+            got = qt.get_quote("SPY", provider="yahoo")
+        self.assertTrue(got.get("earnings_error", "").startswith("earnings date unavailable"))
+        self.assertNotIn("{", got.get("earnings_error", ""))
+
+    def test_yahoo_html_and_nasdaq_parsers(self):
+        html = r'prefix \"earningsDate\":[{\"raw\":1793649600,\"fmt\":\"2026-11-02\"}] suffix'
+        self.assertEqual(qt.parse_yahoo_html_earnings(html, as_of_date=dt.date(2026, 10, 15)), "2026-11-02")
+        self.assertEqual(qt._extract_yahoo_crumb('{"user":{"crumb":"mCC1tYlndwL"}}'), "mCC1tYlndwL")
+        blob = {"data": {"reportText": "Apple Inc. is expected* to report earnings on  11/02/2026 after market close."}}
+        self.assertEqual(qt.parse_nasdaq_earnings_blob(blob, as_of_date=dt.date(2026, 10, 15)), "2026-11-02")
 
     def test_get_quote_attaches_earnings(self):
         snap = {"latestTrade": {"p": 10}, "dailyBar": {"o": 9, "h": 11, "l": 8, "c": 10, "v": 1},
@@ -711,6 +764,19 @@ class IvAndRangeAlerts(unittest.TestCase):
         wl = {"tickers": [{"symbol": "AAPL", "alerts": [{"type": "price_above", "value": 1}]},
                           {"symbol": "NVDA", "alerts": [{"type": "iv_below", "value": 20}]}]}
         self.assertEqual(alerts.tickers_with_iv_alerts(wl), {"NVDA"})
+
+
+class SkillBundle(unittest.TestCase):
+    def test_skill_scripts_match_root(self):
+        names = ("alerts.py", "brief.py", "quotes.py", "watchlist.py",
+                 "market_calendar.py", "notify.py", "indicators.py")
+        root = os.path.join(ROOT, "scripts")
+        for skill in ("price-alerts", "watchlist-brief", "watchlist-manager"):
+            dest = os.path.join(ROOT, "skills", skill, "scripts")
+            for n in names:
+                with open(os.path.join(root, n), "rb") as a, open(os.path.join(dest, n), "rb") as b:
+                    self.assertEqual(a.read(), b.read(), f"{skill}/scripts/{n} out of sync; run python3 scripts/bundle_skills.py")
+            self.assertTrue(os.path.exists(os.path.join(ROOT, "skills", skill, "data", "holidays_overrides.json")))
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 {
   "name": "us-watchlist-alerts",
   "displayName": "US Watchlist & Price Alerts",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "US stock watchlists, NYSE-aware price alerts, and morning/close briefs. No API keys required. Never places trades.",
   "author": {
     "name": "Eli Alvarado",

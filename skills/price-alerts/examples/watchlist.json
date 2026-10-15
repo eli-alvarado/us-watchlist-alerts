@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "settings": {
+    "cooldown_minutes": 240,
+    "rearm_pct": 0.5,
+    "sessions": ["regular"],
+    "volume_spike_multiple": 2.0,
+    "near_52w_pct": 2.0,
+    "earnings_days": 3,
+    "max_alerts_per_run": 20,
+    "timezone_display": "America/New_York"
+  },
+  "tickers": [
+    {
+      "symbol": "AAPL", "side": "long", "added": "2026-10-01",
+      "thesis": "Services margin expansion + iPhone upgrade cycle",
+      "entry": 225.0, "targets": [250.0, 270.0], "stop": 210.0,
+      "tags": ["megacap", "consumer-tech"],
+      "alerts": [
+        {"type": "price_above", "value": 240},
+        {"type": "near_52w_high", "value": 2},
+        {"type": "earnings_within", "value": 14},
+        {"type": "rsi_above", "value": 75}
+      ],
+      "notes": ""
+    },
+    {
+      "symbol": "TSLA", "side": "watch", "added": "2026-10-01",
+      "thesis": "Waiting for capitulation volume before considering entry",
+      "entry": null, "targets": [], "stop": null,
+      "tags": ["ev", "high-beta"],
+      "alerts": [
+        {"type": "pct_change_down", "value": 5},
+        {"type": "gap_down", "value": 3},
+        {"type": "volume_spike", "value": 2.5},
+        {"type": "rsi_below", "value": 30},
+        {"type": "earnings_within", "value": 3}
+      ],
+      "notes": ""
+    },
+    {
+      "symbol": "NVDA", "side": "long", "added": "2026-10-01",
+      "thesis": "AI datacenter capex",
+      "entry": 160.0, "targets": [190.0], "stop": 140.0,
+      "tags": ["ai", "semis"],
+      "alerts": [
+        {"type": "golden_cross", "fast": 50, "slow": 200},
+        {"type": "cross_below_ma", "value": 50},
+        {"type": "price_below", "value": 150, "cooldown_minutes": 60}
+      ],
+      "notes": ""
+    }
+  ]
+}

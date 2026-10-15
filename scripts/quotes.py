@@ -20,25 +20,33 @@ rules skip rather than guess. No IV rank, unusual-options flow, or Black-Scholes
 Earnings dates are filled independently of the quote provider (first hit):
 
 1. Already on the quote (yfinance, or a fixture)
-2. Yahoo ``quoteSummary`` ``calendarEvents`` (stdlib, unofficial)
-3. Finnhub earnings calendar, if ``FINNHUB_API_KEY`` is set
-4. Alpha Vantage ``EARNINGS_CALENDAR``, if ``ALPHAVANTAGE_API_KEY`` is set
+2. Yahoo ``quoteSummary`` ``calendarEvents`` (crumb + cookies)
+3. Yahoo quote HTML (same unofficial page; often includes the date and crumb)
+4. Nasdaq analyst ``earnings-date`` (free, no key)
+5. Finnhub earnings calendar, if ``FINNHUB_API_KEY`` is set
+6. Alpha Vantage ``EARNINGS_CALENDAR``, if ``ALPHAVANTAGE_API_KEY`` is set
 
 Normalized quote dict: see ``QUOTE_FIELDS``.
 
 CLI: python scripts/quotes.py AAPL MSFT [--fixture tests/fixtures/quotes.json] [--provider yahoo]
 """
 from __future__ import annotations
-import argparse, datetime as dt, http.cookiejar, json, os, sys, time, urllib.error, urllib.parse, urllib.request
+import argparse, datetime as dt, http.cookiejar, json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 from zoneinfo import ZoneInfo
 
 UA = {
-    "User-Agent": "us-watchlist-alerts/0.3 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
+    "User-Agent": "us-watchlist-alerts/0.3.2 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
+}
+# Yahoo crumb/cookie endpoints reject the project UA; chart still accepts it.
+YAHOO_BROWSER_UA = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
 }
 YAHOO_HOSTS = ("query1.finance.yahoo.com", "query2.finance.yahoo.com")
 _ET = ZoneInfo("America/New_York")
 _yahoo_jar = None
 _yahoo_crumb = None
+_yahoo_html: dict[str, str] = {}
 QUOTE_FIELDS = (
     "symbol", "price", "prev_close", "open", "day_high", "day_low", "volume",
     "avg_volume_20d", "high_52w", "low_52w", "closes", "earnings_date",
@@ -101,6 +109,7 @@ def _request(url, method="GET", data=None, headers=None, timeout=None, retries=2
         try:
             opener, crumb = _yahoo_session()
             url = _yahoo_url(url, crumb)
+            hdrs = {**YAHOO_BROWSER_UA, **hdrs}
         except Exception:
             opener = None
     open_fn = opener.open if opener is not None else urllib.request.urlopen
@@ -295,38 +304,130 @@ def _reset_yahoo_session():
     global _yahoo_jar, _yahoo_crumb
     _yahoo_jar = None
     _yahoo_crumb = None
+    _yahoo_html.clear()
 
 
-def _yahoo_session():
-    """Cookie jar + crumb for unofficial Yahoo endpoints that 401 without them.
+def _extract_yahoo_crumb(html):
+    """Pull crumb from a finance.yahoo.com HTML payload (escaped or raw JSON)."""
+    if not html:
+        return None
+    for pat in (r'"crumb":"([^"]+)"', r'\\"crumb\\":\\"([^\\"]+)\\"'):
+        m = re.search(pat, html)
+        if m:
+            crumb = m.group(1).strip()
+            if crumb and " " not in crumb and len(crumb) < 80:
+                return crumb
+    return None
 
-    Chart works without this. quoteSummary and options often do not.
-    Failures return ``(opener, None)`` so callers can still try unauthenticated.
-    """
-    global _yahoo_jar, _yahoo_crumb
+
+def parse_yahoo_html_earnings(html, as_of_date=None):
+    """Next earnings ISO date from a Yahoo quote page, or None."""
+    if not html:
+        return None
+    today = as_of_date or dt.date.today()
+    found = []
+    for pat in (
+        r'"earningsDate":\[\{"raw":\d+,"fmt":"(\d{4}-\d{2}-\d{2})"',
+        r'\\"earningsDate\\":\[\{\\"raw\\":\d+,\\"fmt\\":\\"(\d{4}-\d{2}-\d{2})\\"',
+        r'Earnings Date</span>.*?\b([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})\b',
+    ):
+        for m in re.finditer(pat, html, re.S):
+            raw = m.group(1)
+            try:
+                if raw[0].isalpha():
+                    d = dt.datetime.strptime(raw, "%b %d, %Y").date()
+                else:
+                    d = dt.date.fromisoformat(raw)
+            except ValueError:
+                continue
+            found.append(d)
+        if found:
+            break
+    future = [d for d in found if d >= today]
+    pick = min(future) if future else (max(found) if found else None)
+    return pick.isoformat() if pick else None
+
+
+def parse_nasdaq_earnings_blob(data, as_of_date=None):
+    """Parse Nasdaq analyst earnings-date JSON/text into an ISO date."""
+    blob = data if isinstance(data, str) else json.dumps(data or {})
+    m = re.search(r"earnings on\s+(\d{1,2}/\d{1,2}/\d{4})", blob, re.I)
+    if not m:
+        m = re.search(r"\b(\d{1,2}/\d{1,2}/\d{4})\b", blob)
+    if not m:
+        return None
+    try:
+        d = dt.datetime.strptime(m.group(1), "%m/%d/%Y").date()
+    except ValueError:
+        return None
+    today = as_of_date or dt.date.today()
+    if d < today - dt.timedelta(days=7):
+        return None
+    return d.isoformat()
+
+
+def _yahoo_opener():
+    global _yahoo_jar
     if _yahoo_jar is None:
         _yahoo_jar = http.cookiejar.CookieJar()
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_yahoo_jar))
+    return urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_yahoo_jar))
+
+
+def _yahoo_session(warm_symbol="SPY"):
+    """Cookie jar + crumb. Chart works without this; quoteSummary/options do not.
+
+    1. ``fc.yahoo.com`` (404 is OK) sets ``A3``
+    2. Quote HTML sets ``A1`` and often embeds the crumb
+    3. ``/v1/test/getcrumb`` as a fallback (429s easily)
+    """
+    global _yahoo_crumb
+    opener = _yahoo_opener()
     if _yahoo_crumb:
         return opener, _yahoo_crumb
     try:
-        req = urllib.request.Request("https://finance.yahoo.com", headers=UA)
+        req = urllib.request.Request("https://fc.yahoo.com", headers=YAHOO_BROWSER_UA)
         with opener.open(req, timeout=_timeout()) as r:
             r.read()
+    except Exception:
+        pass
+    try:
+        html = _yahoo_quote_html(warm_symbol, opener=opener)
+        crumb = _extract_yahoo_crumb(html)
+        if crumb:
+            _yahoo_crumb = crumb
+            return opener, _yahoo_crumb
     except Exception:
         pass
     for host in YAHOO_HOSTS:
         url = f"https://{host}/v1/test/getcrumb"
         try:
-            req = urllib.request.Request(url, headers={**UA, "Accept": "text/plain,*/*"})
+            req = urllib.request.Request(url, headers={**YAHOO_BROWSER_UA, "Accept": "text/plain,*/*"})
             with opener.open(req, timeout=_timeout()) as r:
                 crumb = r.read().decode().strip()
-            if crumb and "html" not in crumb.lower() and len(crumb) < 80:
+            if crumb and "html" not in crumb.lower() and " " not in crumb and len(crumb) < 80:
                 _yahoo_crumb = crumb
                 return opener, _yahoo_crumb
         except Exception:
             continue
     return opener, None
+
+
+def _yahoo_quote_html(symbol, opener=None):
+    key = (symbol or "SPY").upper()
+    if key in _yahoo_html:
+        return _yahoo_html[key]
+    opener = opener or _yahoo_opener()
+    url = f"https://finance.yahoo.com/quote/{urllib.parse.quote(key)}"
+    req = urllib.request.Request(url, headers={**YAHOO_BROWSER_UA, "Accept": "text/html,*/*"})
+    with opener.open(req, timeout=_timeout()) as r:
+        html = r.read().decode("utf-8", "replace")
+    _yahoo_html[key] = html
+    global _yahoo_crumb
+    if not _yahoo_crumb:
+        crumb = _extract_yahoo_crumb(html)
+        if crumb:
+            _yahoo_crumb = crumb
+    return html
 
 
 def _yahoo_url(url, crumb=None):
@@ -618,6 +719,25 @@ def earnings_from_yahoo(symbol, as_of_date=None):
     return pick.isoformat() if pick else None
 
 
+def earnings_from_yahoo_html(symbol, as_of_date=None):
+    html = _yahoo_quote_html(symbol)
+    ed = parse_yahoo_html_earnings(html, as_of_date=as_of_date)
+    if not ed:
+        raise QuoteError("yahoo-html", f"no earnings date in quote page for {symbol}")
+    return ed
+
+
+def earnings_from_nasdaq(symbol, as_of_date=None):
+    """Free Nasdaq analyst page: 'expected to report earnings on MM/DD/YYYY'."""
+    url = f"https://api.nasdaq.com/api/analyst/{urllib.parse.quote(symbol.upper())}/earnings-date"
+    d = _get(url, headers={**YAHOO_BROWSER_UA, "Accept": "application/json"}, provider="nasdaq")
+    ed = parse_nasdaq_earnings_blob(d, as_of_date=as_of_date)
+    if not ed:
+        raise QuoteError("nasdaq", f"no upcoming earnings date for {symbol}",
+                         hint="Nasdaq analyst text missing or symbol has no report")
+    return ed
+
+
 def earnings_from_finnhub(symbol, as_of_date=None):
     k = _finnhub_key()
     today = as_of_date or dt.date.today()
@@ -675,23 +795,43 @@ def earnings_from_alphavantage(symbol, as_of_date=None):
     return min(future).isoformat() if future else None
 
 
-def lookup_earnings(symbol, existing=None, as_of_date=None):
+def lookup_earnings(symbol, existing=None, as_of_date=None, errors_out=None):
     """Return (iso_date, source) using the first source that yields a date."""
     if existing:
         return existing, "existing"
-    steps = [("yahoo-calendar", earnings_from_yahoo)]
+    steps = [
+        ("yahoo-calendar", earnings_from_yahoo),
+        ("yahoo-html", earnings_from_yahoo_html),
+        ("nasdaq", earnings_from_nasdaq),
+    ]
     if os.environ.get("FINNHUB_API_KEY"):
         steps.append(("finnhub", earnings_from_finnhub))
     if os.environ.get("ALPHAVANTAGE_API_KEY"):
         steps.append(("alphavantage", earnings_from_alphavantage))
+    errors = []
     for name, fn in steps:
         try:
             ed = fn(symbol, as_of_date=as_of_date)
             if ed:
                 return ed, name
-        except Exception:
+        except Exception as e:
+            errors.append(f"{name}: {e}")
             continue
+    if errors_out is not None:
+        errors_out.extend(errors)
     return None, None
+
+
+def _summarize_earnings_errors(errors):
+    """One-line degrade message — no raw Yahoo JSON dumps."""
+    names = []
+    for e in errors or []:
+        name = str(e).split(":", 1)[0].strip()
+        if name and name not in names:
+            names.append(name)
+    listed = ", ".join(names) if names else "all sources"
+    return (f"earnings date unavailable — {listed} returned no date "
+            "(common for ETFs; confirm on the issuer IR page)")
 
 
 def _iv_to_percent(iv):
@@ -777,25 +917,70 @@ def from_yahoo_options(symbol, price=None):
     return info
 
 
+def from_yfinance_options(symbol, price=None):
+    """ATM IV via yfinance's option_chain (optional extra)."""
+    import yfinance as yf  # optional
+    t = yf.Ticker(symbol)
+    exps = list(t.options or [])
+    if not exps:
+        raise QuoteError("yfinance-options", f"no expirations for {symbol}")
+    chain = t.option_chain(exps[0])
+    def rows(df):
+        if df is None or not hasattr(df, "to_dict"):
+            return []
+        return df.to_dict("records")
+    exp_ts = None
+    try:
+        exp_ts = int(dt.datetime.fromisoformat(exps[0]).replace(tzinfo=dt.timezone.utc).timestamp())
+    except ValueError:
+        exp_ts = None
+    payload = {"optionChain": {"result": [{
+        "quote": {"regularMarketPrice": price},
+        "options": [{"expirationDate": exp_ts, "calls": rows(chain.calls), "puts": rows(chain.puts)}],
+    }]}}
+    info = parse_yahoo_atm_iv(payload, price=price)
+    if not info:
+        raise QuoteError("yfinance-options", f"no ATM IV for {symbol}")
+    info["iv_source"] = "yfinance-options"
+    return info
+
+
 def attach_iv(q, fetch=None):
-    """Fill ``atm_iv`` from Yahoo options if missing. Failures leave the field unset."""
+    """Fill ``atm_iv`` from Yahoo options, then yfinance. Failures set ``iv_error``."""
     if q.get("atm_iv"):
         return q
     symbol = q.get("symbol")
-    try:
-        info = (fetch or from_yahoo_options)(symbol, q.get("price"))
-    except Exception:
-        info = None
+    errors = []
+    info = None
+    if fetch is not None:
+        try:
+            info = fetch(symbol, q.get("price"))
+        except Exception as e:
+            errors.append(str(e))
+    else:
+        for fn in (from_yahoo_options, from_yfinance_options):
+            try:
+                info = fn(symbol, q.get("price"))
+                if info and info.get("atm_iv"):
+                    break
+            except ImportError:
+                errors.append("yfinance not installed")
+            except Exception as e:
+                errors.append(str(e))
+                info = None
     if info and info.get("atm_iv"):
         q["atm_iv"] = info["atm_iv"]
         q["iv_expiry"] = info.get("iv_expiry")
         q["iv_source"] = info.get("iv_source") or "yahoo-options"
         if info.get("iv_strike") is not None:
             q["iv_strike"] = info["iv_strike"]
+        q.pop("iv_error", None)
     else:
         q.setdefault("atm_iv", None)
         q.setdefault("iv_expiry", None)
         q.setdefault("iv_source", None)
+        if errors:
+            q["iv_error"] = "ATM IV unavailable — " + errors[0]
     return q
 
 
@@ -839,10 +1024,13 @@ def get_quote(symbol, provider="auto", fixture=None, fetch_earnings=True):
                          f"all providers failed for {symbol}: " + "; ".join(errors),
                          hint="set ALPACA_* keys for the official feed, or WATCHLIST_PROVIDER=yahoo")
     if fetch_earnings and not q.get("earnings_date"):
-        ed, src = lookup_earnings(symbol)
+        earn_errs = []
+        ed, src = lookup_earnings(symbol, errors_out=earn_errs)
         if ed:
             q["earnings_date"] = ed
             q["earnings_source"] = src
+        elif earn_errs:
+            q["earnings_error"] = _summarize_earnings_errors(earn_errs)
     return q
 
 

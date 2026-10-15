@@ -164,14 +164,34 @@ DAILY = {"pct_change_up", "pct_change_down", "pct_move", "gap_up", "gap_down", "
          "earnings_within", "intraday_range_pct"}
 
 
+def _closed_reason(now, extra):
+    """Why the regular session is not open: weekend, holiday name, or None (same-day after/pre)."""
+    day = now.astimezone(mc.ET).date()
+    if mc.is_trading_day(day, extra=extra):
+        return None
+    name = mc.holiday_name(day, extra=extra)
+    if name:
+        return name
+    if day.weekday() >= 5:
+        return "weekend"
+    return "closed"
+
+
 def run(wl, state, quotes_by_sym, now, force_session=False, stale_after=None):
     cfg = {**DEFAULTS, **(wl.get("settings") or {})}
     extra = mc.parse_dates(cfg.get("extra_closures"))
     cfg["_today"] = now.astimezone(mc.ET).date()
     sess = mc.session(now, extra=extra)
     out, errors = [], []
-    if not force_session and sess not in cfg["sessions"]:
-        return {"session": sess, "skipped": True, "alerts": [], "errors": [], "stale": []}
+    last_close = sess not in cfg["sessions"]
+    if last_close and not force_session:
+        reason = _closed_reason(now, extra)
+        # Weekend / full-day holiday: stay silent. After-hours, pre-market, and
+        # overnight on a trading day: evaluate last regular close and label it.
+        if reason:
+            nxt = mc.next_trading_day(cfg["_today"], extra=extra)
+            return {"session": sess, "skipped": True, "alerts": [], "errors": [], "stale": [],
+                    "reason": reason, "next_session": nxt.isoformat()}
     if stale_after is None:
         stale_after = cfg.get("stale_after_seconds", DEFAULTS["stale_after_seconds"])
     trading_date = cfg["_today"].isoformat()
@@ -215,6 +235,8 @@ def run(wl, state, quotes_by_sym, now, force_session=False, stale_after=None):
                 stale.append({"symbol": t["symbol"], "age_seconds": int(age), "as_of": q.get("as_of"),
                               "source": q.get("source")})
     res = {"session": sess, "skipped": False, "alerts": out, "errors": errors, "stale": stale}
+    if last_close:
+        res["last_close"] = True
     if truncated:
         res["truncated"] = True
     return res
@@ -262,6 +284,12 @@ def main(argv=None):
             quotes[t["symbol"]] = q
         except Exception as e:
             quotes[t["symbol"]] = {"error": str(e)}
+    for t in wl["tickers"]:
+        q = quotes.get(t["symbol"]) or {}
+        if q.get("iv_error") and t["symbol"] in iv_syms:
+            print(f"WARN {t['symbol']}: {q['iv_error']}", file=sys.stderr)
+        if q.get("earnings_error") and any(r.get("type") == "earnings_within" for r in t.get("alerts") or []):
+            print(f"WARN {t['symbol']}: {q['earnings_error']}", file=sys.stderr)
     stale_after = a.stale_after
     if stale_after is None:
         env = os.environ.get("WATCHLIST_STALE_AFTER")
@@ -284,9 +312,18 @@ def main(argv=None):
         et = now.astimezone(mc.ET)
         if warn:
             print(f"WARN {warn}", file=sys.stderr)
-        if res["skipped"]: print(f"[{et:%Y-%m-%d %H:%M} ET] session={res['session']} - outside alert sessions, nothing checked")
-        elif not res["alerts"]: print(f"[{et:%Y-%m-%d %H:%M} ET] no new alerts")
-        for x in res["alerts"]: print(f"ALERT {x['message']}")
+        if res["skipped"]:
+            why = res.get("reason") or "outside alert sessions"
+            nxt = res.get("next_session")
+            extra = f". Next session {nxt}" if nxt else ""
+            print(f"[{et:%Y-%m-%d %H:%M} ET] session={res['session']} — market closed ({why}){extra}")
+        else:
+            if res.get("last_close"):
+                print(f"[{et:%Y-%m-%d %H:%M} ET] session={res['session']} — market closed, showing last regular close")
+            if not res["alerts"]:
+                print(f"[{et:%Y-%m-%d %H:%M} ET] no new alerts")
+            for x in res["alerts"]:
+                print(f"ALERT {x['message']}")
         if res.get("truncated"):
             print(f"WARN alert cap ({(wl.get('settings') or {}).get('max_alerts_per_run', DEFAULTS['max_alerts_per_run'])}) reached; remaining alerts left unlatched", file=sys.stderr)
         for e in res["errors"]: print(f"WARN {e['symbol']}: {e['error']}", file=sys.stderr)

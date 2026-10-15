@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2 — 2026-10-15
+
+First-run friction: install, after-hours, earnings/IV.
+
+- **`npx skills add` ships `scripts/`** (and holiday data + example watchlist) inside each skill folder, so the one-liner is enough to run `quotes.py` / `alerts.py` without a separate clone.
+- **After-hours last-close mode:** on a trading day outside `settings.sessions`, evaluate the last regular close and print `market closed, showing last regular close`. Weekends and full-day holidays stay skipped (with the next session date). `--force-session` is no longer required after the bell.
+- **Earnings / ATM IV:** Yahoo crumb from `fc.yahoo.com` + quote HTML (browser UA), then Nasdaq analyst `earnings-date` as a key-free fallback. IV tries Yahoo options (crumb) then yfinance if installed. Failures set `earnings_error` / `iv_error` (one line, no raw JSON dump) instead of inventing values. Live 2026-10-15 after hours: AAPL/NVDA earnings + ATM IV via crumb; Nasdaq agreed when Yahoo layers were forced off.
+
 ## 0.3.1 — 2026-10-15
 
 Live Yahoo path: do not treat `chartPreviousClose` as yesterday's close (it is the print before the chart range, so a 1y chart produced fake +16–37% daily moves). `prev_close` is now `previousClose` / `regularMarketPreviousClose`, else the prior daily bar. `as_of` uses `regularMarketTime` when present. quoteSummary / options attach a Yahoo crumb + cookies when Yahoo will mint one (those endpoints 401 without it).

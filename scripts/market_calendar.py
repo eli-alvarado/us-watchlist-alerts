@@ -15,8 +15,22 @@ import os
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
+
+
+def _data_file(name):
+    """Resolve bundled data next to a git clone (`repo/data`) or a skill copy (`skill/data`)."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for cand in (
+        os.path.join(os.path.dirname(here), "data", name),
+        os.path.join(here, "data", name),
+    ):
+        if os.path.exists(cand):
+            return cand
+    return os.path.join(os.path.dirname(here), "data", name)
+
+
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_OVERRIDE_PATH = os.path.join(_ROOT, "data", "holidays_overrides.json")
+_OVERRIDE_PATH = _data_file("holidays_overrides.json")
 _OFFICIAL_CLOSED: dict[dt.date, str] = {}
 _OVERRIDE_CACHE: dict[dt.date, str] | None = None
 
@@ -204,7 +218,7 @@ def alpaca_calendar_url(year):
 
 
 def calendar_cache_path():
-    return os.environ.get("NYSE_CALENDAR_CACHE") or os.path.join(_ROOT, ".nyse_calendar_cache.json")
+    return os.environ.get("NYSE_CALENDAR_CACHE") or os.path.join(os.getcwd(), ".nyse_calendar_cache.json")
 
 
 def load_calendar_cache(year, path=None, today=None, allow_stale=False):

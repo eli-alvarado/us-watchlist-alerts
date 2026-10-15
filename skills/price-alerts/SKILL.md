@@ -8,18 +8,18 @@ description: Check a US stock watchlist for price alerts - price above/below, % 
 Evaluates alert rules from the watchlist (see `watchlist-manager`) against fresh quotes and reports **only new** alerts.
 **Not financial advice. Never place, modify or cancel orders** - even if an alert fires, even if a broker tool is connected, unless the user explicitly confirms that specific order in this conversation.
 
-Scripts live in the GitHub repo (`scripts/alerts.py`), not inside a `npx skills add` copy of this file. If `scripts/` is missing, clone https://github.com/eli-alvarado/us-watchlist-alerts and run from that root.
+`scripts/` ships **next to this SKILL.md** (copied by `npx skills add`). Run from this skill folder, or from a git clone of the repo (root `scripts/` is the same files).
 
 ## Run it
 ```bash
-python scripts/alerts.py --watchlist watchlist.json --state .alert_state.json            # text output
+python3 scripts/alerts.py --watchlist watchlist.json --state .alert_state.json           # text output
 python scripts/alerts.py --format json                                                    # machine-readable
-python scripts/alerts.py --force-session                                                  # evaluate even when market closed
+python scripts/alerts.py --force-session                                                  # evaluate on weekends / holidays too
 python scripts/alerts.py --dry-run                                                        # don't update cooldown state
 python scripts/alerts.py --notify                                                         # also deliver via WATCHLIST_NOTIFY sinks
 python scripts/market_calendar.py                                                         # current ET session
 ```
-Output: `ALERT <message>` lines, or `no new alerts`, or a "outside alert sessions" note. Data errors go to stderr as `WARN`. `NOTIFY <sink>` confirms delivery; sink failures are `WARN notify …` and must not abort the check. Never treat a notify sink as a broker.
+Output: `ALERT <message>` lines, or `no new alerts`, or `market closed, showing last regular close` after the bell (last regular print; no `--force-session` needed). Weekends and full-day holidays stay silent (`market closed (weekend|holiday). Next session YYYY-MM-DD`) unless `--force-session`. Data errors go to stderr as `WARN` (including `earnings_error` / `iv_error`). `NOTIFY <sink>` confirms delivery; sink failures are `WARN notify …` and must not abort the check. Never treat a notify sink as a broker.
 
 ## Alert types
 | type | value | fires when | kind |
@@ -52,7 +52,7 @@ Any rule may set `cooldown_minutes` to override `settings.cooldown_minutes`.
 ## Market hours (America/New_York, handled by `scripts/market_calendar.py`)
 - Pre-market 04:00-09:30, regular 09:30-16:00, after-hours 16:00-20:00 ET; early-close days (day after Thanksgiving, Christmas Eve, July 3 when a weekday) close 13:00 with after-hours to 17:00.
 - NYSE holidays: New Year's (not observed when Saturday), MLK, Presidents', Good Friday, Memorial, Juneteenth, Independence, Labor, Thanksgiving, Christmas (Sat -> Fri, Sun -> Mon). Unscheduled closures: bundled `data/holidays_overrides.json`, `NYSE_EXTRA_CLOSURES` / `settings.extra_closures`, and (with Alpaca keys) weekdays missing from the official calendar. Mention it if quotes look stale on a weekday the calendar thinks is open.
-- `settings.sessions` controls when alerts run; default `["regular"]`. Add `"pre"`/`"after"` for extended hours - note extended-hours quotes are thinner and free sources may lag.
+- `settings.sessions` controls when **extended-hours quotes** are treated as live. Default `["regular"]`. After the bell (or pre-open / overnight) on a trading day, the script still evaluates the last regular close and labels `last_close` — you do not need `--force-session`. Add `"pre"`/`"after"` only if you want to treat extended-hours prints as the live session. Those quotes are thinner and free sources may lag.
 - Always state times in ET (add the user's local time if known, e.g. "10:05 ET / 9:05 CT").
 
 ## Data sources (`scripts/quotes.py`, auto-fallback in this order)
@@ -65,11 +65,11 @@ Any rule may set `cooldown_minutes` to override `settings.cooldown_minutes`.
 
 Force one with `--provider` or `WATCHLIST_PROVIDER`. HTTP 429/5xx are retried; failures are tagged `QuoteError`s (provider, HTTP status, hint). Free data can be delayed ~15 min; say so when precision matters.
 
-**Earnings dates** are filled after the quote, first hit: existing field (yfinance/fixture) → Yahoo `calendarEvents` (no key) → Finnhub earnings calendar → Alpha Vantage `EARNINGS_CALENDAR`. `earnings_source` on the quote says which layer won.
+**Earnings dates** are filled after the quote, first hit: existing field (yfinance/fixture) → Yahoo `calendarEvents` (cookie + crumb) → Yahoo quote HTML → Nasdaq analyst `earnings-date` (free, no key) → Finnhub / Alpha Vantage if keyed. `earnings_source` says which layer won; if none do, `earnings_error` prints a WARN.
 
 **Stale quotes:** `--stale-after` / `WATCHLIST_STALE_AFTER` / `settings.stale_after_seconds` (default 900). During the regular session, warn if `as_of` is older than that. `0` disables.
 
-**ATM IV:** only fetched for tickers with `iv_above`/`iv_below`. Unofficial Yahoo options chain, nearest expiration, ATM call/put average as percent. Not IV rank. `python scripts/quotes.py AAPL --iv` to inspect.
+**ATM IV:** only fetched for tickers with `iv_above`/`iv_below`. Unofficial Yahoo options chain (same crumb), then yfinance if installed. Nearest expiration, ATM call/put average as percent. Not IV rank. Failures set `iv_error` and print a WARN. `python3 scripts/quotes.py AAPL --iv` to inspect.
 
 **Notify (optional):** `WATCHLIST_NOTIFY=ntfy,slack,webhook,desktop,file` and/or `--notify`. See README for env vars. Do not notify on empty/skipped/dry-run. Delivery errors stay warnings.
 

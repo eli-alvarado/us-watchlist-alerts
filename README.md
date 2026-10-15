@@ -8,9 +8,9 @@ Works in **Claude Code, Codex CLI, Cursor, Gemini CLI** and any agent that reads
 
 > **Not financial advice.** The skills tell the agent to **never place, modify or cancel a trade without your explicit confirmation of that specific order**, and to give no buy/sell recommendations. Free market data may be delayed ~15 minutes. Use at your own risk.
 
-![Fixture demo: alerts then a morning brief](docs/demo.gif)
+![Fixture demo: after-hours last-close alerts, then a silent second run](docs/demo.gif)
 
-Demo above is **offline**, driven by `tests/fixtures/` (the same data CI uses). Live Yahoo/yfinance output will differ and may be delayed.
+Demo above is **offline**, driven by `tests/fixtures/` (the same data CI uses). It shows the after-hours banner (`market closed, showing last regular close`) and a second run that stays silent. Live Yahoo/yfinance numbers will differ and may be delayed ~15 minutes.
 
 ## What's inside
 
@@ -25,45 +25,50 @@ Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher wit
 
 ## Quick start
 
-One line to get a runnable clone (scripts are stdlib; this is the install that can actually fetch quotes):
-
-```bash
-git clone --depth 1 https://github.com/eli-alvarado/us-watchlist-alerts && cd us-watchlist-alerts
-```
-
-Then:
-
-```bash
-cp examples/watchlist.json watchlist.json
-python3 scripts/quotes.py AAPL NVDA
-python3 scripts/alerts.py --force-session
-python3 scripts/brief.py --kind morning
-python3 -m unittest discover -s tests      # offline, fixtures only
-```
-
-Agent-skills one-liner (installs the three `SKILL.md` files; you still need the clone above for `scripts/`):
+One-line install that **ships the scripts** (no extra clone):
 
 ```bash
 npx skills add eli-alvarado/us-watchlist-alerts -y
 ```
 
-Offline demo (no network, same output as the GIF):
+Then run them from the skill folder the installer just created (stdlib, no keys):
+
+```bash
+python3 .agents/skills/price-alerts/scripts/quotes.py AAPL
+python3 .agents/skills/price-alerts/scripts/alerts.py --watchlist .agents/skills/price-alerts/examples/watchlist.json
+```
+
+If your agent uses `.cursor/skills` (or another path), swap the prefix — `scripts/` is always next to that skill's `SKILL.md`.
+
+Or clone the repo and use the same files at the root:
+
+```bash
+git clone --depth 1 https://github.com/eli-alvarado/us-watchlist-alerts && cd us-watchlist-alerts
+cp examples/watchlist.json watchlist.json
+python3 scripts/quotes.py AAPL NVDA
+python3 scripts/alerts.py
+python3 scripts/brief.py --kind morning
+python3 -m unittest discover -s tests      # offline, fixtures only
+```
+
+After the bell you do **not** need `--force-session`. `alerts.py` evaluates the last regular close and prints `market closed, showing last regular close`. Weekends and full-day holidays stay silent (with the next session date).
+
+Offline demo (no network, same output as the GIF — after-hours last-close mode):
 
 ```bash
 WATCHLIST_NOTIFY_FILE=/tmp/alerts.jsonl python3 scripts/alerts.py \
   --watchlist tests/fixtures/watchlist.json --fixture tests/fixtures/quotes.json \
-  --now 2026-10-15T10:05:00-04:00 --state /tmp/wl-state.json --notify file
+  --now 2026-10-15T18:30:00-04:00 --state /tmp/wl-state.json --notify file
 python3 scripts/brief.py --watchlist tests/fixtures/watchlist.json \
-  --fixture tests/fixtures/quotes.json --kind morning --now 2026-10-15T08:30:00-04:00
+  --fixture tests/fixtures/quotes.json --kind close --now 2026-10-15T16:15:00-04:00
 ```
-
-Set `WATCHLIST_NOTIFY_FILE=/tmp/alerts.jsonl` (or `WATCHLIST_NOTIFY=ntfy` plus `NTFY_TOPIC`) to actually deliver. The GIF uses the file sink so it stays offline.
 
 ## Example output
 
-### Price alerts (fixture, regular session)
+### Price alerts (fixture, after hours — last regular close)
 
 ```text
+[2026-10-15 18:30 ET] session=after — market closed, showing last regular close
 ALERT AAPL $241.50 is above $240.00
 ALERT AAPL within 0.0% of 52w high $241.50
 ALERT AAPL reports earnings in 14 day(s) (2026-10-29)
@@ -77,6 +82,27 @@ NOTIFY file /tmp/alerts.jsonl
 ```
 
 A second run in the same session prints `no new alerts` until a level re-arms or the next trading day (daily events). Agents running [HEARTBEAT.md](HEARTBEAT.md) stay silent when the list is empty. `--notify` / `WATCHLIST_NOTIFY` also stay silent on empty, skipped, and `--dry-run` runs.
+
+### Live after hours (2026-10-15, delayed Yahoo chart — snapshot)
+
+No `--force-session`. Crumb worked: AAPL earnings `2026-11-02` (`yahoo-calendar`), ATM IV 22.4% (`yahoo-options`). Nasdaq agreed on AAPL (`2026-11-02`) when Yahoo layers were forced off. SPY (an ETF) has no earnings date — the CLI now says so in one line instead of dumping a Yahoo 404 body.
+
+```text
+[2026-10-15 18:45 ET] session=after — market closed, showing last regular close
+ALERT AAPL $342.00 is above $240.00
+ALERT AAPL within 1.8% of 52w high $348.15
+ALERT AAPL $342.00 reached target $250.00
+ALERT AAPL $342.00 reached target $270.00
+ALERT NVDA $217.23 reached target $190.00
+```
+
+```text
+AAPL  $342.00  −0.28% vs prev_close $342.96   earnings 2026-11-02 (yahoo-calendar)   ATM IV 22.4% exp 2026-10-16
+SPY   $771.79  +0.28%                         earnings unavailable (ETF)            ATM IV 1.8% exp 2026-10-15 (0DTE)
+NVDA  $217.23  −1.84%                         earnings 2026-11-17 (yahoo-calendar)   ATM IV 34.8% exp 2026-10-16
+```
+
+`prev_close` is yesterday, not the 1y chart range start (that bug was v0.3.1). SPY's 1.8% IV is nearest-expiry on expiration day after the bell — a remaining limitation, not a crumb failure.
 
 ### Watchlist brief (fixture, morning)
 
@@ -99,15 +125,15 @@ _Data: fixture. Informational only - not financial advice._
 
 ## Install per agent
 
-The skills call `python scripts/...` relative to the **repo root**, so install the whole clone (or symlink it). Python **3.10+** is tested in CI.
+Python **3.10+** is tested in CI. Each skill folder includes `scripts/` (same files as the repo root).
 
-Universal installer, if you use [skills.sh](https://skills.sh):
+Universal installer ([skills.sh](https://skills.sh)):
 
 ```bash
 npx skills add eli-alvarado/us-watchlist-alerts -y
 ```
 
-That command works (verified: finds `price-alerts`, `watchlist-brief`, `watchlist-manager`). It copies `SKILL.md` only — the evaluator scripts are not in that tree. Clone the repo (or pass `-a claude-code` / `-a cursor` / `-a copilot` / `-a gemini-cli`) and run `python3 scripts/...` from the clone.
+Pass `-a claude-code`, `-a cursor`, `-a copilot`, or `-a gemini-cli` to pick an agent path. Scripts land next to `SKILL.md` in that path.
 
 ### Claude Code
 
@@ -248,7 +274,7 @@ For `provider=auto`, first success wins:
 5. **Finnhub** quote + candles if `FINNHUB_API_KEY` is set
 6. **Alpha Vantage** daily if `ALPHAVANTAGE_API_KEY` is set
 
-Earnings dates are filled **separately** (Yahoo `calendarEvents`, then Finnhub, then Alpha Vantage) so `earnings_within` works without yfinance. HTTP calls retry 429/5xx; failures are `QuoteError`s with a provider and hint.
+Earnings dates are filled **separately** (Yahoo `calendarEvents` with crumb/cookie, then quote HTML, then Nasdaq analyst `earnings-date`, then Finnhub/AV if keyed) so `earnings_within` works without yfinance. ATM IV uses the same crumb, then yfinance if installed. Failures set `earnings_error` / `iv_error` and print a WARN — they do not invent values. HTTP calls retry 429/5xx; quote failures are `QuoteError`s with a provider and hint.
 
 Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 

@@ -21,9 +21,11 @@ Filled independently of the price provider, first success:
 | Order | Source | Needs |
 |------:|--------|-------|
 | 1 | Already on the quote (yfinance / fixture) | — |
-| 2 | Yahoo `quoteSummary` `calendarEvents` | nothing (unofficial) |
-| 3 | Finnhub `/calendar/earnings` | `FINNHUB_API_KEY` |
-| 4 | Alpha Vantage `EARNINGS_CALENDAR` | `ALPHAVANTAGE_API_KEY` |
+| 2 | Yahoo `quoteSummary` `calendarEvents` | unofficial; cookie + crumb |
+| 3 | Yahoo quote HTML | unofficial; same page often embeds the date |
+| 4 | Nasdaq analyst `earnings-date` | nothing (free JSON) |
+| 5 | Finnhub `/calendar/earnings` | `FINNHUB_API_KEY` |
+| 6 | Alpha Vantage `EARNINGS_CALENDAR` | `ALPHAVANTAGE_API_KEY` |
 
 Dates can be wrong, delayed, or missing. Confirm against the issuer’s IR calendar before acting. `earnings_source` on the quote dict says which layer won.
 
@@ -44,7 +46,7 @@ Yahoo hosts are unofficial and can change, rate-limit, or require cookies. Free 
 
 **Yahoo `chartPreviousClose` is not yesterday's close.** On a 1-year daily chart it is the print before the range (often ~12 months old). This repo uses `previousClose` / `regularMarketPreviousClose` when present, otherwise the prior daily bar. `as_of` prefers `regularMarketTime`.
 
-**Yahoo `quoteSummary` (earnings) and `v7/finance/options` (ATM IV)** return HTTP 401 `Invalid Crumb` unless a cookie + crumb session can be minted (`/v1/test/getcrumb` after `finance.yahoo.com`). That crumb endpoint 429s easily. When crumb minting fails, `earnings_date` and `atm_iv` stay null and those rules skip — they do not invent values. The daily chart path does not need a crumb and is the default no-key quote source.
+**Yahoo crumb:** quoteSummary and options need cookies (`fc.yahoo.com` 404 is OK) plus a crumb (from the quote HTML, or `/v1/test/getcrumb`). `getcrumb` 429s easily; the HTML crumb is preferred. When that still fails, earnings fall through to Nasdaq; IV tries yfinance if installed. Remaining failures set `earnings_error` / `iv_error` and print a WARN — they do not invent values. The daily chart path does not need a crumb.
 
 `--provider` / `WATCHLIST_PROVIDER` pins a single provider and does not fall through.
 
@@ -62,12 +64,12 @@ Yahoo hosts are unofficial and can change, rate-limit, or require cookies. Free 
 | `high_52w` / `low_52w` | 52-week extremes |
 | `closes` | Daily closes, oldest → newest (omitted from CLI unless `--full`) |
 | `earnings_date` | ISO date or `null` |
-| `earnings_source` | `yfinance`, `yahoo-calendar`, `finnhub`, `alphavantage`, or `null` |
+| `earnings_source` | `yfinance`, `yahoo-calendar`, `yahoo-html`, `nasdaq`, `finnhub`, `alphavantage`, or `null` |
 | `source` | Winning quote provider (`alpaca`, `yahoo-chart`, …) |
 | `as_of` | UTC timestamp when the quote was assembled |
 | `atm_iv` | Nearest-expiry ATM implied vol in **percent**, or `null` |
 | `iv_expiry` | ISO date of that options expiration, or `null` |
-| `iv_source` | `yahoo-options` when filled |
+| `iv_source` | `yahoo-options` or `yfinance-options` when filled |
 
 `--stale-after` (default 900s, env `WATCHLIST_STALE_AFTER`, setting `stale_after_seconds`) warns during the **regular** session when `as_of` is older than that. `0` disables.
 
@@ -76,6 +78,8 @@ Yahoo hosts are unofficial and can change, rate-limit, or require cookies. Free 
 `iv_above` / `iv_below` use Yahoo's unofficial `v7/finance/options/{symbol}` chain (nearest expiration only). The ATM strike is the closest listed strike to last price; call and put `impliedVolatility` are averaged when both are present and positive. Yahoo usually returns a decimal (`0.25` → 25%); values already in percent pass through. The chain is fetched **only** for tickers that have an IV rule, and never on `--fixture` unless `atm_iv` is already in the file.
 
 Skipped (the rule does not fire) when IV is missing or `0`. This is **not** IV rank, IV percentile, unusual options activity, or a Black-Scholes model. Those need history or flow data this project does not have on the free path.
+
+Nearest-expiry can be **0DTE**. After the bell on expiration day that print can look implausibly tight (SPY printed ~1.8% on 2026-10-15). We do not invent the next expiry when Yahoo only returns today's chain.
 
 ## Intraday range
 
