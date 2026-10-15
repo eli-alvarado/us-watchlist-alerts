@@ -1,6 +1,6 @@
 # With vs. without the skill
 
-**Lead with the heartbeat:** recurring 15-minute checks are where the skill wins. Replayed Yahoo tape + counts: [heartbeat/](heartbeat/) (**3 alerts with state, 61 without**). One-shot live transcripts below are still honest — a capable agent without the skill is fine on a single turn.
+**Lead with the heartbeat:** [heartbeat/](heartbeat/) — **same 3 important moves; 58 duplicate pings avoided** (61 without-skill pings = 3 first + 58 repeats). One-shot live transcripts below are still honest — a capable agent without the skill is fine on a single turn.
 
 | | |
 |---|---|

@@ -819,6 +819,20 @@ class HeartbeatReplay(unittest.TestCase):
         wo = sum(len(r["alerts"]) for r in rep["without_skill"])
         self.assertEqual(w, 3)
         self.assertEqual(wo, 61)
+        a = rep["audit"]
+        self.assertEqual(a["distinct_events"], 3)
+        self.assertEqual(a["repeats"], 58)
+        self.assertEqual(a["repeats_regular_hours"], 50)
+        self.assertEqual(a["repeats_after_hours"], 6)
+        self.assertEqual(a["repeats_closed_weekend"], 2)
+        self.assertTrue(a["skill_covered_every_distinct_event"])
+        self.assertEqual(a["missed_keys"], [])
+        self.assertEqual(a["without_total"], 61)
+        self.assertEqual(a["skill_alerts"], 3)
+        self.assertEqual(a["closed_or_after_total"], 8)
+        self.assertEqual(set(a["by_key"]), {
+            "AAPL|price_above:340", "NVDA|intraday_low_pct", "NVDA|pct_change_down",
+        })
         sat = [r for r in rep["with_skill"] if r["now"].startswith("2026-10-17")]
         self.assertTrue(sat and sat[0]["skipped"] and sat[0].get("reason") == "weekend")
         after = [r for r in rep["with_skill"] if r.get("last_close")]

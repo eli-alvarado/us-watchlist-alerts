@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Heartbeat demo framing: lead with “same 3 important moves; 58 duplicate pings avoided.” Audit of the 61 without-skill pings (3 first + 50 regular repeats + 6 after-hours + 2 Saturday). Skill missed none. Timeline image + replay stdout match that wording.
+
 ## 0.3.3 — 2026-10-15
 
 - **Opt-in session extremes:** `intraday_low_pct` / `intraday_high_pct` / alias `intraday_extreme_pct` fire on session low or high vs prior close. Default `pct_change_*` remains last vs prior close (a recovered low does not fire). Docs say this plainly.

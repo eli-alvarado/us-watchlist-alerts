@@ -1,7 +1,7 @@
 REPLAYED DATA — replay-yahoo-15m
 REPLAYED — not a live feed. 15-minute Yahoo chart bars for 2026-10-15 (query1, range=5d, interval=15m, includePrePost=true), pulled 2026-10-15 ~18:57 ET. prev_close is Yahoo previo…
 
-=== WITH skill (latch + daily once + session gate) ===
+=== WITH skill (one ping per new event) ===
   09:30  ALERT AAPL $345.89 is above $340.00
   09:30  ALERT NVDA session low $213.12 is -3.70% vs prior close
   09:45  ALERT NVDA down -3.26% today
@@ -33,9 +33,9 @@ REPLAYED — not a live feed. 15-minute Yahoo chart bars for 2026-10-15 (query1,
   16:15  session=after last_close  (silent)
   18:30  session=after last_close  (silent)
   10:00 Sat  skip session=closed (weekend)
-  total new alerts: 3
+  pings: 3  (all first-time news)
 
-=== WITHOUT skill (fresh evaluate every tick, no state, no session gate) ===
+=== WITHOUT skill (re-ping whenever the condition is still true) ===
   09:30  ALERT AAPL $345.89 is above $340.00
   09:30  ALERT NVDA session low $213.12 is -3.70% vs prior close
   09:45  ALERT AAPL $345.14 is above $340.00
@@ -97,6 +97,17 @@ REPLAYED — not a live feed. 15-minute Yahoo chart bars for 2026-10-15 (query1,
   18:30  ALERT NVDA session low $212.85 is -3.82% vs prior close
   10:00 Sat  ALERT AAPL $341.49 is above $340.00
   10:00 Sat  ALERT NVDA session low $212.85 is -3.82% vs prior close
-  total alerts: 61
+  pings: 61
+
+=== AUDIT ===
+  Same 3 important moves caught. 58 duplicate pings avoided.
+  without-skill pings: 61  =  3 first  +  58 repeats
+    repeats during regular hours: 50
+    repeats after the bell:       6
+    repeats Saturday/closed:      2
+  skill missed a real distinct event: False
+  - 09:30  AAPL $345.89 is above $340.00   (30 pings without / 1 with)
+  - 09:30  NVDA session low $213.12 is -3.70% vs prior close   (30 pings without / 1 with)
+  - 09:45  NVDA down -3.26% today   (1 pings without / 1 with)
 
 wrote /workspace/docs/demo/heartbeat/replay_report.json

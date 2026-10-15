@@ -14,34 +14,32 @@ Demo above is **offline**, driven by `tests/fixtures/` (the same data CI uses). 
 
 ## With vs. without the skill
 
-The skill’s job is a **15-minute heartbeat**, not a one-shot quote. A capable agent without it can fetch Yahoo and the NYSE calendar. What it usually does not have is latch + once-per-day + a session gate that survive the next turn.
+**Same 3 important moves caught. 58 duplicate pings avoided.**
 
-### Recurring monitor (where the skill wins)
+Fewer alerts here is the point. The skill is not “worse at finding news” — it found every distinct event on the tape and then stayed quiet. A check that has no memory re-sends the same two headlines every 15 minutes, including after the close and on Saturday.
 
-**Replayed** Yahoo 15-minute bars for **2026-10-15** (plus a Saturday tick). Same three rules every check: AAPL `price_above 340`, NVDA/SPY `pct_change_down: 3` and opt-in `intraday_low_pct: 3`. Offline: `python3 docs/demo/heartbeat/replay.py`.
+### One trading day, checked every 15 minutes (replayed)
 
-![Replayed heartbeat: 3 alerts with the skill, 61 without](docs/demo/heartbeat/side-by-side.png)
+**Replayed** Yahoo 15-minute prices for Thursday **2026-10-15** (not live), plus one Saturday tick. Same watch list both sides: tell me if AAPL is over $340, or if NVDA/SPY drops 3% (last print **or** the session low). Offline: `python3 docs/demo/heartbeat/replay.py`.
 
-| | **With** `.alert_state.json` + NYSE gate | **Without** (fresh evaluate every tick, no state, no session skip) |
-|---|---|---|
-| 09:30 | AAPL above $340 (once). NVDA session low −3.70% | Same two alerts |
-| 09:45 | NVDA last −3.26% (once) | AAPL above $340 **again**; NVDA last −3.26%; NVDA low **again** |
-| 10:00–15:45 | silent (23 ticks) | AAPL above $340 **and** NVDA low **every 15 min** |
-| After the bell | last-close, silent | still fires AAPL $340 and NVDA low |
-| Saturday 10:00 | skip (`weekend`) | still fires both |
-| **Total** | **3 alerts** | **61 alerts** |
+![Same 3 moves; 58 extra pings avoided](docs/demo/heartbeat/side-by-side.png)
 
-Default `%` rules are still **last vs prior close**. The 09:30 NVDA low (−3.70%) is opt-in `intraday_low_pct`; `pct_change_down` waited until 09:45 when last itself was −3.26%, then stayed quiet after the bounce. Full log and fixture: [docs/demo/heartbeat/](docs/demo/heartbeat/).
+| When | What was actually new | With the skill | Without (no memory) |
+|---|---|---|---|
+| 09:30 | AAPL over $340. NVDA already −3.7% on the low | 2 pings (the news) | 2 pings |
+| 09:45 | NVDA’s last print also −3.3% | 1 ping (the news) | 3 pings (2 of them repeats) |
+| 10:00–15:45 | Nothing new. Same two conditions still true | quiet | **50 more pings** |
+| After 4:00 PM | Market closed | quiet | 6 more pings |
+| Saturday | Market closed | quiet | 2 more pings |
+| **All day** | **3 real events** | **3 pings** | **61 pings** (3 news + **58 repeats**) |
 
-### One-shot prompts (2026-10-15 ~18:50 ET, Cursor Grok 4.6)
+The skill did **not** miss a real event. NVDA’s low ticked from −3.70% to −3.82% at 09:45; that is the same “down 3% on the low” headline, not a fourth event. 8 of the 58 repeats arrived after the bell or on Saturday.
 
-Unedited transcripts in [`docs/demo/`](docs/demo/). The without-skill agent **did fine** on a single turn — live prints, official NYSE page. It also caught NVDA’s recovered session low that `pct_change_down` ignores; that is why `intraday_low_pct` exists and is **opt-in**.
+Default “down 3% today” still means **last price vs yesterday’s close**. The session-low rule is opt-in (`intraday_low_pct`). Full audit: [docs/demo/heartbeat/](docs/demo/heartbeat/).
 
-| Prompt | Without | With |
-|---|---|---|
-| Alert if AAPL/NVDA/SPY drops 3% today | No close-to-close 3% drop; noted NVDA low **−3.82%** | Same last prints; persisted rules; last-close banner; other book alerts |
-| Morning brief | Long recap, still titled “morning” after the bell | Close brief (`session=after`) |
-| Market open tomorrow? / Nov 27 2026? | Regular Friday / early close 1:00 PM ET (NYSE web) | Same answers from `market_calendar.py` |
+### One-shot questions (same day, ~6:50 PM ET, Cursor Grok 4.6)
+
+On a **single** question, a capable agent without the skill is fine — live prices, official NYSE calendar. Unedited transcripts: [`docs/demo/`](docs/demo/). The skill’s edge is the next 20 checks, not the first one.
 
 ## What's inside
 

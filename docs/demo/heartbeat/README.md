@@ -1,16 +1,33 @@
-# Heartbeat replay — where the skill actually wins
+# Heartbeat replay — same news, fewer pings
 
-**REPLAYED data**, not a live feed. 15-minute Yahoo chart bars for Thursday 2026-10-15 (`query1`, `range=5d`, `interval=15m`, `includePrePost=true`), pulled 2026-10-15 ~18:57 ET. `prev_close` is Yahoo `previousClose` (not `chartPreviousClose`). Session high/low are running extremes of those bars. Saturday 2026-10-17 10:00 ET reuses Friday’s last snapshot so the weekend skip is visible.
+**Same 3 important moves caught. 58 duplicate pings avoided.**
 
-Reproduce (offline, no keys):
+Fewer is better. The skill reported every distinct event on this tape, then went quiet. Without memory, the same two headlines were sent again every 15 minutes.
+
+**REPLAYED data**, not a live feed. 15-minute Yahoo chart bars for Thursday 2026-10-15 (`query1`, `range=5d`, `interval=15m`, `includePrePost=true`), pulled 2026-10-15 ~18:57 ET. `prev_close` is Yahoo `previousClose` (not `chartPreviousClose`). Session high/low are running extremes of those bars. Saturday 2026-10-17 10:00 ET reuses Friday’s last snapshot.
 
 ```bash
 python3 docs/demo/heartbeat/replay.py
 ```
 
-CI asserts the counts: **3 alerts with the skill, 61 without**.
+CI asserts: 3 distinct events, all covered by the skill; 61 without-skill pings = 3 first + 58 repeats (50 during regular hours, 6 after the bell, 2 Saturday).
 
-![3 vs 61 on the replayed 2026-10-15 tape](side-by-side.png)
+![Same 3 moves; 58 extra pings avoided](side-by-side.png)
+
+## Audit of the 61 without-skill pings
+
+| Distinct event (first time) | Pings without | Pings with | Repeats |
+|---|---:|---:|---:|
+| 09:30 AAPL over $340 | 30 | 1 | 29 |
+| 09:30 NVDA session low −3.70% | 30 | 1 | 29 |
+| 09:45 NVDA last print −3.26% | 1 | 1 | 0 |
+| **Total** | **61** | **3** | **58** |
+
+Of those 58 repeats: **50** while the regular session was still open, **6** after 4:00 PM ET, **2** on Saturday.
+
+**Did the skill miss a real event?** No. At 09:45 the NVDA low moved from $213.12 (−3.70%) to $212.85 (−3.82%). That is the same once-per-day “session low is past −3%” condition, not a new headline. SPY never hit 3% on either path.
+
+Closed-session pings (after the bell + Saturday) were **8**, and all 8 were repeats of news already sent at 09:30.
 
 ## Setup
 
@@ -18,38 +35,17 @@ User request, restated every 15 minutes: *keep an eye on these — ping me if AA
 
 | Ticker | Rules |
 |---|---|
-| AAPL | `price_above 340` (level — should latch) |
+| AAPL | `price_above 340` (level — latch after the first fire) |
 | NVDA | `pct_change_down: 3` (last vs prior close) **and** opt-in `intraday_low_pct: 3` |
 | SPY | same two % rules (never trigger on this tape) |
 
-**With:** `alerts.run` + one `.alert_state.json` + default `sessions=["regular"]` (after-hours = last-close, weekend = skip).
+**With:** `alerts.run` + one `.alert_state.json` + default `sessions=["regular"]`.
 
-**Without:** the same `evaluate_rule`, but no state and no session gate — a fresh agent turn that only looks at the current quote. That is what happens if there is no skill and no `.alert_state.json`.
+**Without:** the same `evaluate_rule`, no state, no session gate — a fresh look at the current quote every 15 minutes.
 
-A *new chat* at 13:00 that only hears “keep an eye on these” would also lose the 3% rule unless someone persisted the watchlist. The skill writes that file. The numeric demo does not simulate forgetting the rule; it simulates forgetting the **dedupe**.
+## Tape (replayed)
 
-## What the tape did (replayed)
-
-NVDA prior close **$221.30**. At **09:30** last was −2.59% but the session low was already **−3.70%** ($213.12). At **09:45** last printed **−3.26%** ($214.08) and the low ticked to **−3.82%** ($212.85). Last then recovered to about **−1.8%** into the close. AAPL stayed **$341–$347** all day.
-
-So:
-
-- Default `pct_change_down: 3` fires **once**, at 09:45, when last itself was ≤ −3%.
-- Opt-in `intraday_low_pct: 3` fires **once**, at 09:30, on the session low.
-- `price_above 340` fires **once**, then latches.
-
-Without state, AAPL>$340 and NVDA’s low re-fire every 15 minutes, including after the bell and on Saturday.
-
-## Counts
-
-See [replay_out.txt](replay_out.txt) (unedited script stdout).
-
-| | With skill | Without |
-|---|---|---|
-| New alerts | 3 | 61 |
-| Silent regular ticks after 09:45 | 23 | 0 |
-| After-hours | last-close, silent | 6 more alerts |
-| Saturday | skip (`weekend`) | 2 more alerts |
+NVDA prior close **$221.30**. 09:30 last −2.59%, session low already **−3.70%**. 09:45 last **−3.26%**, low **−3.82%**. Last recovered to about **−1.8%** by the close. AAPL stayed **$341–$347** all day (never dropped back through $340, so the level stays latched).
 
 ## Files
 
@@ -57,6 +53,7 @@ See [replay_out.txt](replay_out.txt) (unedited script stdout).
 |---|---|
 | [replay_2026-10-15.json](replay_2026-10-15.json) | Labeled snapshots |
 | [watchlist.json](watchlist.json) | Rules used |
-| [replay.py](replay.py) | Both paths |
-| [replay_out.txt](replay_out.txt) | Captured stdout |
-| [replay_report.json](replay_report.json) | Machine-readable rows |
+| [replay.py](replay.py) | Both paths + audit |
+| [replay_out.txt](replay_out.txt) | Captured stdout (includes AUDIT block) |
+| [replay_report.json](replay_report.json) | Rows + `audit` object |
+| [render.py](render.py) | Regenerates `side-by-side.png` (needs Pillow; docs only) |

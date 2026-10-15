@@ -84,7 +84,7 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 - [x] Cache Alpaca calendar on disk for the ET day so HEARTBEAT ticks do not hit `/v2/calendar` every 15 minutes
 - [x] Demo GIF showing notify
 - [x] v0.3.2: `npx skills add` ships `scripts/` (no extra clone); after-hours last-close without `--force-session`; Yahoo crumb + Nasdaq earnings / IV degrade
-- [x] v0.3.3: opt-in `intraday_low_pct` / `intraday_extreme_pct`; heartbeat replay demo (3 vs 61 alerts)
+- [x] v0.3.3: opt-in `intraday_low_pct` / `intraday_extreme_pct`; heartbeat replay demo (same 3 events; 58 duplicate pings avoided)
 - International listings stay out of scope unless someone owns the calendar and a legal data source.
 
 ### v0.4 — still no auto-trade

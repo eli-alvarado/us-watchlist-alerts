@@ -11,6 +11,10 @@
       "alerts": [
         "AAPL $345.89 is above $340.00",
         "NVDA session low $213.12 is -3.70% vs prior close"
+      ],
+      "keys": [
+        "AAPL|price_above:340",
+        "NVDA|intraday_low_pct"
       ]
     },
     {
@@ -21,6 +25,9 @@
       "reason": null,
       "alerts": [
         "NVDA down -3.26% today"
+      ],
+      "keys": [
+        "NVDA|pct_change_down"
       ]
     },
     {
@@ -29,7 +36,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T10:15:00-04:00",
@@ -37,7 +45,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T10:30:00-04:00",
@@ -45,7 +54,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T10:45:00-04:00",
@@ -53,7 +63,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T11:00:00-04:00",
@@ -61,7 +72,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T11:15:00-04:00",
@@ -69,7 +81,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T11:30:00-04:00",
@@ -77,7 +90,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T11:45:00-04:00",
@@ -85,7 +99,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T12:00:00-04:00",
@@ -93,7 +108,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T12:15:00-04:00",
@@ -101,7 +117,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T12:30:00-04:00",
@@ -109,7 +126,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T12:45:00-04:00",
@@ -117,7 +135,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T13:00:00-04:00",
@@ -125,7 +144,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T13:15:00-04:00",
@@ -133,7 +153,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T13:30:00-04:00",
@@ -141,7 +162,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T13:45:00-04:00",
@@ -149,7 +171,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T14:00:00-04:00",
@@ -157,7 +180,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T14:15:00-04:00",
@@ -165,7 +189,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T14:30:00-04:00",
@@ -173,7 +198,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T14:45:00-04:00",
@@ -181,7 +207,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T15:00:00-04:00",
@@ -189,7 +216,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T15:15:00-04:00",
@@ -197,7 +225,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T15:30:00-04:00",
@@ -205,7 +234,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T15:45:00-04:00",
@@ -213,7 +243,8 @@
       "skipped": false,
       "last_close": null,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T16:00:00-04:00",
@@ -221,7 +252,8 @@
       "skipped": false,
       "last_close": true,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T16:15:00-04:00",
@@ -229,7 +261,8 @@
       "skipped": false,
       "last_close": true,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-15T18:30:00-04:00",
@@ -237,7 +270,8 @@
       "skipped": false,
       "last_close": true,
       "reason": null,
-      "alerts": []
+      "alerts": [],
+      "keys": []
     },
     {
       "now": "2026-10-17T10:00:00-04:00",
@@ -245,7 +279,8 @@
       "skipped": true,
       "last_close": null,
       "reason": "weekend",
-      "alerts": []
+      "alerts": [],
+      "keys": []
     }
   ],
   "without_skill": [
@@ -460,5 +495,60 @@
         "NVDA session low $212.85 is -3.82% vs prior close"
       ]
     }
-  ]
+  ],
+  "audit": {
+    "without_total": 61,
+    "distinct_events": 3,
+    "repeats": 58,
+    "repeats_regular_hours": 50,
+    "repeats_after_hours": 6,
+    "repeats_closed_weekend": 2,
+    "closed_or_after_total": 8,
+    "events": [
+      {
+        "key": "AAPL|price_above:340",
+        "now": "2026-10-15T09:30:00-04:00",
+        "message": "AAPL $345.89 is above $340.00"
+      },
+      {
+        "key": "NVDA|intraday_low_pct",
+        "now": "2026-10-15T09:30:00-04:00",
+        "message": "NVDA session low $213.12 is -3.70% vs prior close"
+      },
+      {
+        "key": "NVDA|pct_change_down",
+        "now": "2026-10-15T09:45:00-04:00",
+        "message": "NVDA down -3.26% today"
+      }
+    ],
+    "by_key": {
+      "AAPL|price_above:340": {
+        "first": {
+          "now": "2026-10-15T09:30:00-04:00",
+          "message": "AAPL $345.89 is above $340.00"
+        },
+        "count": 30,
+        "repeats": 29
+      },
+      "NVDA|intraday_low_pct": {
+        "first": {
+          "now": "2026-10-15T09:30:00-04:00",
+          "message": "NVDA session low $213.12 is -3.70% vs prior close"
+        },
+        "count": 30,
+        "repeats": 29
+      },
+      "NVDA|pct_change_down": {
+        "first": {
+          "now": "2026-10-15T09:45:00-04:00",
+          "message": "NVDA down -3.26% today"
+        },
+        "count": 1,
+        "repeats": 0
+      }
+    },
+    "skill_alerts": 3,
+    "skill_covered_every_distinct_event": true,
+    "missed_keys": []
+  }
 }
