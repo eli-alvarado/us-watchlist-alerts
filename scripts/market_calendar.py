@@ -203,24 +203,95 @@ def alpaca_calendar_url(year):
     return f"{base}/v2/calendar?start={year}-01-01&end={year}-12-31"
 
 
-def refresh_official_calendar(year, fetch=None):
+def calendar_cache_path():
+    return os.environ.get("NYSE_CALENDAR_CACHE") or os.path.join(_ROOT, ".nyse_calendar_cache.json")
+
+
+def load_calendar_cache(year, path=None, today=None, allow_stale=False):
+    """Return a date->name map if the on-disk cache matches ``year``.
+
+    Fresh cache: ``fetched`` date equals ``today`` (ET). ``allow_stale`` keeps a
+    same-year file when today's fetch failed so HEARTBEAT still has an overlay.
+    """
+    path = path or calendar_cache_path()
+    today = today or dt.datetime.now(ET).date()
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+    if not isinstance(data, dict) or data.get("year") != year:
+        return None
+    fetched = str(data.get("fetched") or "")[:10]
+    if fetched != today.isoformat() and not allow_stale:
+        return None
+    mapping = {}
+    for row in data.get("closures") or []:
+        try:
+            d = dt.date.fromisoformat(str(row["date"])[:10])
+        except (KeyError, TypeError, ValueError):
+            continue
+        mapping[d] = row.get("name") or "official calendar (market closed)"
+    return mapping
+
+
+def save_calendar_cache(year, mapping, path=None, today=None):
+    path = path or calendar_cache_path()
+    today = today or dt.datetime.now(ET).date()
+    payload = {
+        "year": year,
+        "fetched": today.isoformat(),
+        "closures": [{"date": d.isoformat(), "name": name} for d, name in sorted(mapping.items())],
+    }
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(payload, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+    return path
+
+
+def refresh_official_calendar(year, fetch=None, cache_path=None, today=None):
     """Pull Alpaca's trading calendar and treat missing weekdays as closures.
 
     No-op (returns {}) when keys are missing. ``fetch`` is injected in tests.
+    Live fetches are disk-cached for the ET calendar day (``NYSE_CALENDAR_CACHE``,
+    default ``.nyse_calendar_cache.json``) so HEARTBEAT ticks skip ``/v2/calendar``.
+    Injected ``fetch`` does not read the default cache unless ``cache_path`` is set.
     """
+    today = today or dt.datetime.now(ET).date()
     if fetch is None and not (os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY")):
         return {}
-    if fetch is None:
-        import quotes as qt
-        rows = qt.alpaca_calendar(year)
-    else:
-        rows = fetch(year)
+    path = cache_path if cache_path is not None else (calendar_cache_path() if fetch is None else None)
+    if path:
+        cached = load_calendar_cache(year, path=path, today=today)
+        if cached is not None:
+            return set_official_closures(cached)
+    try:
+        if fetch is None:
+            import quotes as qt
+            rows = qt.alpaca_calendar(year)
+        else:
+            rows = fetch(year)
+    except Exception:
+        if path:
+            stale = load_calendar_cache(year, path=path, today=today, allow_stale=True)
+            if stale is not None:
+                return set_official_closures(stale)
+        raise
     open_dates = set()
     for row in rows or []:
         raw = row.get("date") if isinstance(row, dict) else row
         if raw:
             open_dates.add(dt.date.fromisoformat(str(raw)[:10]))
     mapping = closures_from_trading_days(year, open_dates)
+    if path:
+        try:
+            save_calendar_cache(year, mapping, path=path, today=today)
+        except OSError:
+            pass
     return set_official_closures(mapping)
 
 

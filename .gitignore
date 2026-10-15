@@ -4,3 +4,4 @@ __pycache__/
 *.tmp
 /watchlist.json
 .env
+.nyse_calendar_cache.json

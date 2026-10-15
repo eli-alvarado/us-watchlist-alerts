@@ -17,6 +17,7 @@ Scripts use the Python 3.10+ standard library. Optional extras in `requirements.
 | Change | Where | Tests |
 |---|---|---|
 | New alert type | `scripts/alerts.py` `evaluate_rule`, `watchlist.ALERT_TYPES`, `skills/price-alerts/SKILL.md` | Add a fixture-driven case in `tests/test_all.py` |
+| Notify sink | `scripts/notify.py` `VALID_SINKS` + README env table | Mock `quotes._post`; never hit a real webhook in CI |
 | Calendar / extra closures | `scripts/market_calendar.py` | Holiday, early-close, or `NYSE_EXTRA_CLOSURES` assertion |
 | Quote field / fallback | `scripts/quotes.py` | Mock `_get` or use `tests/fixtures/quotes.json` |
 | Schema | `scripts/watchlist.py` `validate`, `examples/` | Validation tests |

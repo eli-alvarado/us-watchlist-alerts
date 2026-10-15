@@ -10,6 +10,11 @@ Fallback order for ``provider=auto`` (first success wins):
 5. Finnhub quote + candles, if ``FINNHUB_API_KEY`` is set
 6. Alpha Vantage daily, if ``ALPHAVANTAGE_API_KEY`` is set
 
+ATM implied volatility is **not** part of the quote fallback. ``attach_iv`` (or
+``quotes.py --iv``) hits Yahoo's unofficial ``v7/finance/options`` chain and averages
+the nearest-expiration ATM call/put IV. Missing/zero IV is left unset so alert
+rules skip rather than guess. No IV rank, unusual-options flow, or Black-Scholes.
+
 Earnings dates are filled independently of the quote provider (first hit):
 
 1. Already on the quote (yfinance, or a fixture)
@@ -25,13 +30,14 @@ from __future__ import annotations
 import argparse, datetime as dt, json, os, sys, time, urllib.error, urllib.parse, urllib.request
 
 UA = {
-    "User-Agent": "us-watchlist-alerts/0.2 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
+    "User-Agent": "us-watchlist-alerts/0.3 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
 }
 YAHOO_HOSTS = ("query1.finance.yahoo.com", "query2.finance.yahoo.com")
 QUOTE_FIELDS = (
     "symbol", "price", "prev_close", "open", "day_high", "day_low", "volume",
     "avg_volume_20d", "high_52w", "low_52w", "closes", "earnings_date",
     "earnings_source", "source", "as_of",
+    "atm_iv", "iv_expiry", "iv_source",
 )
 
 
@@ -61,21 +67,41 @@ def _sleep(seconds):
     time.sleep(seconds)
 
 
-def _get(url, headers=None, timeout=None, retries=2, provider="http", raw=False):
-    """GET JSON (or raw bytes if ``raw``). Retries 429/5xx with exponential backoff."""
+def _encode_body(data, headers):
+    """Return ``(bytes_or_None, headers)``. Adds Content-Type when we JSON-encode a dict."""
+    if data is None:
+        return None, headers
+    if isinstance(data, (bytes, bytearray)):
+        return bytes(data), headers
+    if isinstance(data, str):
+        if not any(k.lower() == "content-type" for k in headers):
+            headers = {**headers, "Content-Type": "text/plain; charset=utf-8"}
+        return data.encode(), headers
+    if not any(k.lower() == "content-type" for k in headers):
+        headers = {**headers, "Content-Type": "application/json"}
+    return json.dumps(data).encode(), headers
+
+
+def _request(url, method="GET", data=None, headers=None, timeout=None, retries=2, provider="http", raw=False):
+    """HTTP JSON (or raw bytes if ``raw``). Retries 429/5xx with exponential backoff."""
     last = None
     hdrs = {**UA, **(headers or {})}
     timeout = _timeout() if timeout is None else timeout
+    body, hdrs = _encode_body(data, hdrs)
     for attempt in range(retries + 1):
         try:
-            req = urllib.request.Request(url, headers=hdrs)
+            req = urllib.request.Request(url, data=body, headers=hdrs, method=method)
             with urllib.request.urlopen(req, timeout=timeout) as r:
-                body = r.read()
+                resp = r.read()
             if raw:
-                return body
+                return resp
+            if not resp:
+                return {}
             try:
-                return json.loads(body.decode())
+                return json.loads(resp.decode())
             except json.JSONDecodeError as e:
+                if method == "POST":
+                    return {"ok": True, "body": resp.decode()[:240]}
                 raise QuoteError(provider, f"invalid JSON: {e}", hint=url.split("?", 1)[0])
         except urllib.error.HTTPError as e:
             status = e.code
@@ -108,6 +134,18 @@ def _get(url, headers=None, timeout=None, retries=2, provider="http", raw=False)
                 continue
             raise last
     raise last
+
+
+def _get(url, headers=None, timeout=None, retries=2, provider="http", raw=False):
+    """GET JSON (or raw bytes if ``raw``). Retries 429/5xx with exponential backoff."""
+    return _request(url, method="GET", headers=headers, timeout=timeout, retries=retries,
+                    provider=provider, raw=raw)
+
+
+def _post(url, data, headers=None, timeout=None, retries=1, provider="http", raw=False):
+    """POST JSON/text. Retries 429/5xx once. Slack/ntfy often return non-JSON bodies."""
+    return _request(url, method="POST", data=data, headers=headers, timeout=timeout,
+                    retries=retries, provider=provider, raw=raw)
 
 
 def _hint_for_status(status, provider):
@@ -158,6 +196,9 @@ def _finish(q):
         if q.get("low_52w") is None: q["low_52w"] = min(yr)
     q.setdefault("earnings_date", None)
     q.setdefault("earnings_source", None)
+    q.setdefault("atm_iv", None)
+    q.setdefault("iv_expiry", None)
+    q.setdefault("iv_source", None)
     q.setdefault("as_of", _now())
     if q.get("price") is None:
         raise QuoteError(q.get("source") or "quote", f"{q.get('symbol')} has no price")
@@ -549,6 +590,111 @@ def lookup_earnings(symbol, existing=None, as_of_date=None):
     return None, None
 
 
+def _iv_to_percent(iv):
+    """Yahoo chain IV is usually a decimal (0.25 = 25%). Values already in percent pass through."""
+    if iv is None:
+        return None
+    try:
+        iv = float(iv)
+    except (TypeError, ValueError):
+        return None
+    if iv <= 0:
+        return None
+    return iv * 100.0 if iv <= 4.0 else iv
+
+
+def parse_yahoo_atm_iv(payload, price=None):
+    """Nearest-expiry ATM call/put IV average (percent) from a Yahoo v7 options payload."""
+    result = ((payload or {}).get("optionChain") or {}).get("result") or []
+    if not result:
+        return None
+    result = result[0]
+    if price is None:
+        price = (result.get("quote") or {}).get("regularMarketPrice")
+    try:
+        price = float(price)
+    except (TypeError, ValueError):
+        return None
+    options = result.get("options") or []
+    if not options:
+        return None
+    exp = options[0]
+    calls, puts = {}, {}
+    for c in exp.get("calls") or []:
+        if c.get("strike") is not None:
+            calls[float(c["strike"])] = c
+    for p in exp.get("puts") or []:
+        if p.get("strike") is not None:
+            puts[float(p["strike"])] = p
+    strikes = sorted(set(calls) | set(puts), key=lambda s: abs(s - price))
+    picked = None
+    for strike in strikes:
+        ivs = []
+        for opt in (calls.get(strike), puts.get(strike)):
+            pct = _iv_to_percent((opt or {}).get("impliedVolatility"))
+            if pct is not None:
+                ivs.append(pct)
+        if ivs:
+            picked = {"atm_iv": sum(ivs) / len(ivs), "iv_strike": strike,
+                      "iv_source": "yahoo-options"}
+            break
+    if not picked:
+        return None
+    raw = exp.get("expirationDate")
+    expiry = None
+    if raw is not None:
+        try:
+            expiry = dt.datetime.fromtimestamp(int(raw), dt.timezone.utc).date().isoformat()
+        except (TypeError, ValueError, OSError, OverflowError):
+            expiry = str(raw)[:10]
+    picked["iv_expiry"] = expiry
+    return picked
+
+
+def from_yahoo_options(symbol, price=None):
+    """Unofficial Yahoo options chain; nearest expiration only."""
+    s = urllib.parse.quote(symbol.upper())
+    errors = []
+    d = None
+    for host in YAHOO_HOSTS:
+        url = f"https://{host}/v7/finance/options/{s}"
+        try:
+            d = _get(url, provider="yahoo-options")
+            break
+        except Exception as e:
+            errors.append(f"{host}: {e}")
+    if d is None:
+        raise QuoteError("yahoo-options", "options chain failed: " + "; ".join(errors),
+                         hint="unofficial endpoint; IV alerts skip when the chain is empty")
+    info = parse_yahoo_atm_iv(d, price=price)
+    if not info:
+        raise QuoteError("yahoo-options", f"no ATM IV for {symbol}",
+                         hint="chain missing, or impliedVolatility was 0")
+    return info
+
+
+def attach_iv(q, fetch=None):
+    """Fill ``atm_iv`` from Yahoo options if missing. Failures leave the field unset."""
+    if q.get("atm_iv"):
+        return q
+    symbol = q.get("symbol")
+    try:
+        info = (fetch or from_yahoo_options)(symbol, q.get("price"))
+    except Exception:
+        info = None
+    if info and info.get("atm_iv"):
+        q["atm_iv"] = info["atm_iv"]
+        q["iv_expiry"] = info.get("iv_expiry")
+        q["iv_source"] = info.get("iv_source") or "yahoo-options"
+        if info.get("iv_strike") is not None:
+            q["iv_strike"] = info["iv_strike"]
+    else:
+        q.setdefault("atm_iv", None)
+        q.setdefault("iv_expiry", None)
+        q.setdefault("iv_source", None)
+    return q
+
+
 PROVIDERS = {"yfinance": from_yfinance, "yahoo": from_yahoo, "finnhub": from_finnhub,
              "alphavantage": from_alphavantage, "alpaca": from_alpaca}
 
@@ -604,12 +750,16 @@ def main(argv=None):
     ap.add_argument("--full", action="store_true", help="include closes history")
     ap.add_argument("--stale-after", type=int, default=int(os.environ.get("WATCHLIST_STALE_AFTER") or 900),
                     help="warn if as_of is older than N seconds (0=off)")
+    ap.add_argument("--iv", action="store_true",
+                    help="attach unofficial Yahoo ATM implied vol (skipped on --fixture unless already present)")
     a = ap.parse_args(argv)
     out = {}
     now = dt.datetime.now(dt.timezone.utc)
     for s in a.symbols:
         try:
             q = get_quote(s, a.provider, a.fixture)
+            if a.iv and not a.fixture:
+                attach_iv(q)
             if not a.full: q.pop("closes", None)
             if a.stale_after:
                 age = quote_age_seconds(q, now)

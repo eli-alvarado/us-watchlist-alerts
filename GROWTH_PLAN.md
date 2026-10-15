@@ -51,14 +51,14 @@ Keep each post to: what it does, what it refuses to do, fixture demo GIF, instal
 - **X** — short demo GIF thread; tag agent-skills / Claude Code / Gemini CLI, not ticker hype.
 - **HN "Ask"** only if there is a real question (how should agents handle broker confirmation?). Prefer Show HN.
 
-Time the post after a **GitHub release** (`v0.2.0`) so the README badge and tag exist.
+Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag exist.
 
 ## Credibility work
 
 - [x] CI on Python 3.10–3.13 (`python3 -m unittest discover -s tests`)
 - [x] CONTRIBUTING.md, issue templates, limitations doc
-- [x] CHANGELOG.md (starts at 0.1.0 / 0.2.0)
-- [ ] **GitHub release v0.2.0** once this lands on `main`
+- [x] CHANGELOG.md (0.1.0 / 0.2.0 / 0.3.0)
+- [x] GitHub release v0.2.0
 - [ ] File 3–5 **good first issues** (see CONTRIBUTING.md) so the repo looks open, not a dump
 - [ ] Pin a discussion or README FAQ: delayed data, unofficial Yahoo, no China listings
 - [ ] Optional: `pre-commit` only if it stays one ruff/format hook — do not bury contributors in tooling
@@ -73,14 +73,23 @@ Time the post after a **GitHub release** (`v0.2.0`) so the README badge and tag 
 - [x] Official quote path: Alpaca snapshot + daily bars first when keyed; Finnhub candles
 - [x] HTTP retries, `QuoteError` with status/hint, `--stale-after`
 - [x] Quote dict field table in LIMITATIONS.md
-- [ ] Tagged GitHub release `v0.2.0` after merge
+- [x] Tagged GitHub release `v0.2.0`
 
 ### v0.3 — still no auto-trade
 
-- Optional notify sink (write a markdown snippet or JSON line) so HEARTBEAT can be cron + `ntfy`/email **without** the agent placing orders.
-- Intraday range alerts only when a keyed provider actually returns them; refuse to fake them from delayed daily bars.
-- Multi-watchlist files (`WATCHLIST_FILE` already exists — document profiles: swing vs long).
-- Cache Alpaca calendar on disk for the day so HEARTBEAT ticks do not hit `/v2/calendar` every 15 minutes.
+- [x] Notify sinks (webhook, Slack, ntfy, Linux desktop, JSONL file) so HEARTBEAT can be cron + ntfy **without** the agent placing orders
+- [x] ATM IV alerts from unofficial Yahoo options chain (skip if missing/zero; no IV rank / UOA)
+- [x] Intraday range alerts only from provider `day_high`/`day_low`; refuse to fake them from daily closes
+- [x] Multi-watchlist files documented (`WATCHLIST_FILE` + per-profile `ALERT_STATE_FILE`)
+- [x] Cache Alpaca calendar on disk for the ET day so HEARTBEAT ticks do not hit `/v2/calendar` every 15 minutes
+- [x] Demo GIF showing notify
 - International listings stay out of scope unless someone owns the calendar and a legal data source.
+
+### v0.4 — still no auto-trade
+
+- Email / Telegram sinks (need credentials + bounce/rate hygiene; ntfy covers many phones today)
+- IV rank / percentile only if a free source actually returns a history, not a synthetic from prices
+- Live NYSE status feed (calendar cache is not a substitute for "market halted")
+- Marketplace / awesome-list submissions from the list above
 
 Out of scope on purpose: CANSLIM, DCF, options payoff, live order entry. Point at the comparison table instead of growing into a junk drawer.

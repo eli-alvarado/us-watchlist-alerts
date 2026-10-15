@@ -1,6 +1,6 @@
 ---
 name: price-alerts
-description: Check a US stock watchlist for price alerts - price above/below, % daily move, gaps, 52-week highs/lows, moving-average crosses, RSI, volume spikes, stop/target hits, and upcoming earnings - with dedupe, cooldowns, NYSE market hours, pre/after-market, holidays and US/Eastern time. Use when the user asks "any alerts?", "check my watchlist", "alert me if AAPL drops below 200", or when running a scheduled/heartbeat check.
+description: Check a US stock watchlist for price alerts - price above/below, % daily move, gaps, 52-week highs/lows, moving-average crosses, RSI, ATM IV, volume spikes, intraday range, stop/target hits, and upcoming earnings - with dedupe, cooldowns, NYSE market hours, optional ntfy/Slack/webhook delivery, pre/after-market, holidays and US/Eastern time. Use when the user asks "any alerts?", "check my watchlist", "alert me if AAPL drops below 200", "send alerts to ntfy", or when running a scheduled/heartbeat check.
 ---
 
 # Price Alerts (US markets)
@@ -14,9 +14,10 @@ python scripts/alerts.py --watchlist watchlist.json --state .alert_state.json   
 python scripts/alerts.py --format json                                                    # machine-readable
 python scripts/alerts.py --force-session                                                  # evaluate even when market closed
 python scripts/alerts.py --dry-run                                                        # don't update cooldown state
+python scripts/alerts.py --notify                                                         # also deliver via WATCHLIST_NOTIFY sinks
 python scripts/market_calendar.py                                                         # current ET session
 ```
-Output: `ALERT <message>` lines, or `no new alerts`, or a "outside alert sessions" note. Data errors go to stderr as `WARN`.
+Output: `ALERT <message>` lines, or `no new alerts`, or a "outside alert sessions" note. Data errors go to stderr as `WARN`. `NOTIFY <sink>` confirms delivery; sink failures are `WARN notify …` and must not abort the check. Never treat a notify sink as a broker.
 
 ## Alert types
 | type | value | fires when | kind |
@@ -31,13 +32,15 @@ Output: `ALERT <message>` lines, or `no new alerts`, or a "outside alert session
 | `golden_cross` / `death_cross` | `fast`, `slow` (50/200) | SMA fast crosses slow on latest bar | daily |
 | `cross_above_ma` / `cross_below_ma` | MA length (default 50) | last close crosses its SMA | daily |
 | `rsi_above` / `rsi_below` | RSI level; optional `period` (14) | Wilder RSI on daily closes | level |
+| `iv_above` / `iv_below` | IV percent | unofficial Yahoo ATM IV (nearest expiry); skip if missing/0 | level |
 | `volume_spike` | multiple (default 2.0) | today's volume >= value x 20-day avg | daily |
 | `earnings_within` | days (default 3) | next earnings date within N days | daily |
+| `intraday_range_pct` | % | `(day_high-day_low)/prev_close`; skip if high/low missing | daily |
 
 Any rule may set `cooldown_minutes` to override `settings.cooldown_minutes`.
 
 ## Anti-spam rules (implemented in `scripts/alerts.py`, state in `.alert_state.json`)
-- **Level alerts latch**: once fired they stay silent until price moves back through the level by `rearm_pct` (default 0.5%). A stock hovering at $240 never pings repeatedly.
+- **Level alerts latch**: once fired they stay silent until price moves back through the level by `rearm_pct` (default 0.5%). A stock hovering at $240 never pings repeatedly. `iv_*` rearms when ATM IV no longer breaches the threshold.
 - **Daily-event alerts** fire at most once per trading day per ticker/type.
 - **Cooldown** (`cooldown_minutes`, default 240) applies to every re-fire.
 - **Cap** of `max_alerts_per_run` (default 20). Alerts past the cap are **not** written to state, so they can fire on the next run. If many fire, summarize ("7 alerts, 4 on TSLA") rather than dumping walls of text.
@@ -64,7 +67,11 @@ Force one with `--provider` or `WATCHLIST_PROVIDER`. HTTP 429/5xx are retried; f
 
 **Stale quotes:** `--stale-after` / `WATCHLIST_STALE_AFTER` / `settings.stale_after_seconds` (default 900). During the regular session, warn if `as_of` is older than that. `0` disables.
 
-**Known limits:** unscheduled closures live in `data/holidays_overrides.json` (incomplete) plus env/settings plus an optional Alpaca official calendar overlay. Yahoo endpoints are unofficial. See `docs/LIMITATIONS.md`.
+**ATM IV:** only fetched for tickers with `iv_above`/`iv_below`. Unofficial Yahoo options chain, nearest expiration, ATM call/put average as percent. Not IV rank. `python scripts/quotes.py AAPL --iv` to inspect.
+
+**Notify (optional):** `WATCHLIST_NOTIFY=ntfy,slack,webhook,desktop,file` and/or `--notify`. See README for env vars. Do not notify on empty/skipped/dry-run. Delivery errors stay warnings.
+
+**Known limits:** unscheduled closures live in `data/holidays_overrides.json` (incomplete) plus env/settings plus an optional Alpaca official calendar overlay (day-cached). Yahoo endpoints are unofficial. See `docs/LIMITATIONS.md`.
 
 **MCP option:** if an `alpaca` MCP server (alpacahq/alpaca-mcp-server) or `tradingview` MCP (atilaahmettaner/tradingview-mcp) is connected, you may use it for quotes/indicators instead of the scripts, then apply the exact same rules and anti-spam logic (read/write `.alert_state.json` in the same format). Use broker MCPs for **read-only** calls only.
 

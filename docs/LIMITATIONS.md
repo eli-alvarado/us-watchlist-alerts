@@ -10,7 +10,7 @@ Unscheduled closures (days of mourning, weather, outages) are handled in layers,
 
 1. **Bundled file** `data/holidays_overrides.json` — known historical special days (e.g. 2025-01-09 Carter mourning, Sandy 2012). Incomplete; PRs welcome when NYSE announces a new one.
 2. **Local overrides** — `NYSE_EXTRA_CLOSURES=YYYY-MM-DD,...` or watchlist `settings.extra_closures`.
-3. **Official overlay (optional)** — with Alpaca keys, each `alerts.py` / `brief.py` run pulls `GET /v2/calendar` and treats weekdays missing from that list as closed. Network failure is ignored and the rule-based + bundled calendar still applies.
+3. **Official overlay (optional)** — with Alpaca keys, `alerts.py` / `brief.py` pull `GET /v2/calendar` and treat weekdays missing from that list as closed. The response is cached on disk for the ET calendar day (`.nyse_calendar_cache.json` / `NYSE_CALENDAR_CACHE`) so a 15-minute HEARTBEAT does not hit the API every tick. If today's fetch fails, a same-year stale cache is reused. Network failure without a cache is ignored and the rule-based + bundled calendar still applies.
 
 If quotes look stale on a weekday the calendar thinks is open, treat the session as closed and add the date to `extra_closures`.
 
@@ -61,20 +61,38 @@ Yahoo hosts are unofficial and can change, rate-limit, or require cookies. Free 
 | `earnings_source` | `yfinance`, `yahoo-calendar`, `finnhub`, `alphavantage`, or `null` |
 | `source` | Winning quote provider (`alpaca`, `yahoo-chart`, …) |
 | `as_of` | UTC timestamp when the quote was assembled |
+| `atm_iv` | Nearest-expiry ATM implied vol in **percent**, or `null` |
+| `iv_expiry` | ISO date of that options expiration, or `null` |
+| `iv_source` | `yahoo-options` when filled |
 
 `--stale-after` (default 900s, env `WATCHLIST_STALE_AFTER`, setting `stale_after_seconds`) warns during the **regular** session when `as_of` is older than that. `0` disables.
 
+## ATM implied volatility
+
+`iv_above` / `iv_below` use Yahoo's unofficial `v7/finance/options/{symbol}` chain (nearest expiration only). The ATM strike is the closest listed strike to last price; call and put `impliedVolatility` are averaged when both are present and positive. Yahoo usually returns a decimal (`0.25` → 25%); values already in percent pass through. The chain is fetched **only** for tickers that have an IV rule, and never on `--fixture` unless `atm_iv` is already in the file.
+
+Skipped (the rule does not fire) when IV is missing or `0`. This is **not** IV rank, IV percentile, unusual options activity, or a Black-Scholes model. Those need history or flow data this project does not have on the free path.
+
+## Intraday range
+
+`intraday_range_pct` is `(day_high - day_low) / prev_close * 100` (falls back to `day_low` if `prev_close` is missing). If the provider omitted `day_high`/`day_low`, the rule is silent. Daily `closes` are never used as a substitute.
+
+## Alert delivery
+
+`scripts/notify.py` POSTs fired alerts to webhook / Slack / ntfy, runs Linux `notify-send`, or appends JSONL. Failures are warnings. Sinks are not brokers: there is still no order ticket, no signed trading request, and no "just send it" path.
+
 ## What this does not do
 
-- Non-US listings, FX, crypto, futures, or options chains.
-- Intraday bars, Level 2, or guaranteed real-time data on the free path.
+- Non-US listings, FX, crypto, futures, or a full options chain / greeks / payoff calculator.
+- Intraday bars (beyond the session high/low the quote already carries), Level 2, or guaranteed real-time data on the free path.
+- IV rank, unusual options flow, or email/Telegram (use ntfy for phones).
 - Portfolio accounting, tax lots, or broker positions (the watchlist is a thesis/stop/target file, not a broker sync).
 - News, filings, or fundamentals (use a research skillset for that).
 - Automatic order routing.
 
 ## Anti-spam caveats
 
-- Level alerts latch until price re-arms by `rearm_pct` (default 0.5%).
+- Level alerts latch until price (or IV, for `iv_*`) re-arms by `rearm_pct` (default 0.5%).
 - Daily events fire at most once per trading date per ticker/type.
 - `max_alerts_per_run` truncates **output** without latching the omitted alerts, so the next run can emit them.
 - Deleting `.alert_state.json` mid-session will re-send alerts.

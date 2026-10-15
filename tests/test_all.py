@@ -2,7 +2,7 @@ import copy, datetime as dt, io, json, os, sys, tempfile, unittest, urllib.error
 from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
-import alerts, brief, indicators as ind, market_calendar as mc, quotes as qt, watchlist as wlm
+import alerts, brief, indicators as ind, market_calendar as mc, notify, quotes as qt, watchlist as wlm
 
 FX = os.path.join(ROOT, "tests", "fixtures", "quotes.json")
 WL = os.path.join(ROOT, "tests", "fixtures", "watchlist.json")
@@ -413,6 +413,14 @@ class Quotes(unittest.TestCase):
         self.assertIn("HTTP 401", str(err))
         self.assertIn("check alpaca", str(err))
 
+    def test_post_accepts_non_json_body(self):
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self): return b"ok"
+        with mock.patch("urllib.request.urlopen", return_value=FakeResp()):
+            self.assertEqual(qt._post("https://example.test/hook", {"text": "hi"}, provider="slack")["body"], "ok")
+
     def test_http_retries_on_429(self):
         class FakeResp:
             def __enter__(self): return self
@@ -441,6 +449,241 @@ class Quotes(unittest.TestCase):
                 with self.assertRaises(qt.QuoteError) as ctx:
                     qt.from_alphavantage("AAPL")
         self.assertIn("frequency", str(ctx.exception).lower())
+
+    def test_iv_to_percent(self):
+        self.assertAlmostEqual(qt._iv_to_percent(0.25), 25.0)
+        self.assertAlmostEqual(qt._iv_to_percent(25.0), 25.0)
+        self.assertIsNone(qt._iv_to_percent(0))
+        self.assertIsNone(qt._iv_to_percent(None))
+        self.assertAlmostEqual(qt._iv_to_percent(1.5), 150.0)
+
+    def test_parse_yahoo_atm_iv(self):
+        payload = {"optionChain": {"result": [{
+            "quote": {"regularMarketPrice": 100},
+            "options": [{
+                "expirationDate": 1793145600,
+                "calls": [
+                    {"strike": 95, "impliedVolatility": 0.40},
+                    {"strike": 100, "impliedVolatility": 0.20},
+                ],
+                "puts": [
+                    {"strike": 100, "impliedVolatility": 0.22},
+                    {"strike": 105, "impliedVolatility": 0.30},
+                ],
+            }],
+        }]}}
+        info = qt.parse_yahoo_atm_iv(payload)
+        self.assertAlmostEqual(info["atm_iv"], 21.0)
+        self.assertEqual(info["iv_strike"], 100.0)
+        self.assertEqual(info["iv_source"], "yahoo-options")
+        self.assertEqual(info["iv_expiry"], "2026-10-28")
+
+    def test_parse_yahoo_atm_iv_skips_zero_then_next_strike(self):
+        payload = {"optionChain": {"result": [{
+            "quote": {"regularMarketPrice": 100},
+            "options": [{"expirationDate": 1, "calls": [
+                {"strike": 100, "impliedVolatility": 0},
+                {"strike": 101, "impliedVolatility": 0.5},
+            ], "puts": []}]}],
+        }}
+        info = qt.parse_yahoo_atm_iv(payload, price=100)
+        self.assertAlmostEqual(info["atm_iv"], 50.0)
+        self.assertEqual(info["iv_strike"], 101.0)
+
+    def test_attach_iv_uses_fetch_and_skips_errors(self):
+        q = {"symbol": "AAPL", "price": 100, "atm_iv": None}
+        qt.attach_iv(q, fetch=lambda sym, price: {"atm_iv": 33.0, "iv_expiry": "2026-10-28",
+                                                  "iv_source": "yahoo-options"})
+        self.assertEqual(q["atm_iv"], 33.0)
+        broken = {"symbol": "AAPL", "price": 100}
+        qt.attach_iv(broken, fetch=lambda *a: (_ for _ in ()).throw(RuntimeError("nope")))
+        self.assertIsNone(broken.get("atm_iv"))
+
+
+class CalendarCache(unittest.TestCase):
+    def tearDown(self):
+        mc.clear_official_closures()
+
+    def test_cache_hit_skips_fetch(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "cal.json")
+        today = dt.date(2026, 10, 15)
+        calls = []
+        def fetch(year):
+            calls.append(year)
+            return [{"date": "2026-10-16"}]
+        first = mc.refresh_official_calendar(2026, fetch=fetch, cache_path=path, today=today)
+        self.assertIn(dt.date(2026, 10, 15), first)
+        self.assertEqual(calls, [2026])
+        mc.clear_official_closures()
+        second = mc.refresh_official_calendar(2026, fetch=fetch, cache_path=path, today=today)
+        self.assertEqual(calls, [2026])  # no second network
+        self.assertIn(dt.date(2026, 10, 15), second)
+
+    def test_cache_expires_next_day(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "cal.json")
+        calls = []
+        def fetch(year):
+            calls.append(year)
+            return [{"date": "2026-10-16"}]
+        mc.refresh_official_calendar(2026, fetch=fetch, cache_path=path, today=dt.date(2026, 10, 15))
+        mc.clear_official_closures()
+        mc.refresh_official_calendar(2026, fetch=fetch, cache_path=path, today=dt.date(2026, 10, 16))
+        self.assertEqual(calls, [2026, 2026])
+
+    def test_stale_cache_used_when_fetch_fails(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "cal.json")
+        mc.save_calendar_cache(2026, {dt.date(2026, 10, 15): "official calendar (market closed)"},
+                               path=path, today=dt.date(2026, 10, 14))
+        def boom(year):
+            raise RuntimeError("network down")
+        closed = mc.refresh_official_calendar(2026, fetch=boom, cache_path=path, today=dt.date(2026, 10, 15))
+        self.assertIn(dt.date(2026, 10, 15), closed)
+
+
+class Notify(unittest.TestCase):
+    def setUp(self):
+        self.res = {"session": "regular", "skipped": False,
+                    "alerts": [{"symbol": "AAPL", "type": "price_above",
+                                "message": "AAPL $241.50 is above $240.00"}]}
+
+    def test_parse_sinks(self):
+        with mock.patch.dict(os.environ, {"WATCHLIST_NOTIFY": "ntfy, slack, fax"}):
+            known, unknown = notify.parse_sinks("env")
+        self.assertEqual(known, ["ntfy", "slack"])
+        self.assertEqual(unknown, ["fax"])
+
+    def test_format_text(self):
+        t = notify.format_text(self.res)
+        self.assertIn("1 new alert (regular)", t)
+        self.assertIn("AAPL $241.50", t)
+
+    def test_file_sink(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "out.jsonl")
+        with mock.patch.dict(os.environ, {"WATCHLIST_NOTIFY_FILE": path}):
+            out = notify.deliver(self.res, sinks="file")
+        self.assertTrue(out[0]["ok"])
+        with open(path) as f:
+            row = json.loads(f.readline())
+        self.assertEqual(row["count"], 1)
+        self.assertEqual(row["alerts"][0]["symbol"], "AAPL")
+
+    def test_webhook_and_slack_payloads(self):
+        posted = []
+        def fake_post(url, data, headers=None, provider="http", retries=1):
+            posted.append((url, data, provider))
+            return {"ok": True}
+        env = {"WATCHLIST_WEBHOOK_URL": "https://example.test/hook",
+               "SLACK_WEBHOOK_URL": "https://hooks.slack.com/services/x"}
+        with mock.patch.dict(os.environ, env), mock.patch.object(qt, "_post", side_effect=fake_post):
+            out = notify.deliver(self.res, sinks="webhook,slack")
+        self.assertTrue(all(r["ok"] for r in out))
+        self.assertEqual(posted[0][2], "webhook")
+        self.assertEqual(posted[0][1]["source"], "us-watchlist-alerts")
+        self.assertEqual(posted[1][1]["text"].split("\n")[0], "1 new alert (regular)")
+
+    def test_ntfy_headers_and_token(self):
+        posted = []
+        def fake_post(url, data, headers=None, provider="http", retries=1):
+            posted.append((url, data, headers, provider))
+            return {}
+        env = {"NTFY_TOPIC": "watchlist", "NTFY_URL": "https://ntfy.sh", "NTFY_TOKEN": "sekrit"}
+        with mock.patch.dict(os.environ, env), mock.patch.object(qt, "_post", side_effect=fake_post):
+            out = notify.deliver(self.res, sinks="ntfy")
+        self.assertTrue(out[0]["ok"])
+        self.assertEqual(posted[0][0], "https://ntfy.sh/watchlist")
+        self.assertEqual(posted[0][2]["Authorization"], "Bearer sekrit")
+        self.assertEqual(posted[0][1].split("\n")[0], "1 new alert (regular)")
+
+    def test_delivery_failure_does_not_raise(self):
+        with mock.patch.dict(os.environ, {"SLACK_WEBHOOK_URL": "https://hooks.slack.com/x"}):
+            with mock.patch.object(qt, "_post", side_effect=qt.QuoteError("slack", "nope", status=500)):
+                out = notify.deliver(self.res, sinks="slack")
+        self.assertFalse(out[0]["ok"])
+        self.assertIn("nope", out[0]["error"])
+
+    def test_desktop_missing_binary(self):
+        with mock.patch.object(notify.shutil, "which", return_value=None):
+            out = notify.deliver(self.res, sinks="desktop")
+        self.assertFalse(out[0]["ok"])
+        self.assertIn("notify-send", out[0]["error"])
+
+    def test_should_deliver_gates(self):
+        self.assertTrue(notify.should_deliver(self.res))
+        self.assertFalse(notify.should_deliver(self.res, dry_run=True))
+        self.assertFalse(notify.should_deliver({**self.res, "skipped": True}))
+        self.assertFalse(notify.should_deliver({**self.res, "alerts": []}))
+
+
+class IvAndRangeAlerts(unittest.TestCase):
+    def test_iv_above_latch_and_rearm(self):
+        q = {"AAPL": {"price": 241.5, "prev_close": 237, "closes": [200] * 30, "atm_iv": 45.0,
+                      "iv_expiry": "2026-10-28", "source": "fixture"}}
+        wl = {"settings": {"cooldown_minutes": 1},
+              "tickers": [{"symbol": "AAPL", "alerts": [{"type": "iv_above", "value": 40}]}]}
+        st = {"fired": {}}
+        first = alerts.run(wl, st, q, T("2026-10-15T10:00"))
+        self.assertEqual(first["alerts"][0]["type"], "iv_above")
+        self.assertIn("ATM IV 45.0%", first["alerts"][0]["message"])
+        self.assertEqual(alerts.run(wl, st, q, T("2026-10-15T10:05"))["alerts"], [])
+        q["AAPL"]["atm_iv"] = 30.0  # condition false -> rearm
+        alerts.run(wl, st, q, T("2026-10-15T10:10"))
+        q["AAPL"]["atm_iv"] = 46.0
+        self.assertEqual(len(alerts.run(wl, st, q, T("2026-10-15T14:20"))["alerts"]), 1)
+
+    def test_iv_skips_missing_or_zero(self):
+        wl = {"tickers": [{"symbol": "AAPL", "alerts": [{"type": "iv_below", "value": 20}]}]}
+        q = {"AAPL": {"price": 241.5, "prev_close": 237, "closes": [200] * 5, "source": "fixture"}}
+        self.assertEqual(alerts.run(wl, {"fired": {}}, q, T("2026-10-15T10:00"))["alerts"], [])
+        q["AAPL"]["atm_iv"] = 0
+        self.assertEqual(alerts.run(wl, {"fired": {}}, q, T("2026-10-15T10:00"))["alerts"], [])
+
+    def test_intraday_range_uses_day_high_low_only(self):
+        q = {"AAPL": {"price": 100, "prev_close": 100, "day_high": 110, "day_low": 90,
+                      "closes": [100] * 10, "source": "fixture"}}
+        wl = {"tickers": [{"symbol": "AAPL", "alerts": [{"type": "intraday_range_pct", "value": 15}]}]}
+        res = alerts.run(wl, {"fired": {}}, q, T("2026-10-15T10:00"))
+        self.assertEqual(res["alerts"][0]["type"], "intraday_range_pct")
+        # missing range: do not invent from closes (which swing 50%)
+        q2 = {"AAPL": {"price": 150, "prev_close": 100, "closes": [100, 150], "source": "fixture"}}
+        silent = alerts.run(wl, {"fired": {}}, q2, T("2026-10-15T10:00"))
+        self.assertEqual(silent["alerts"], [])
+
+    def test_intraday_range_once_per_day(self):
+        q = {"AAPL": {"price": 100, "prev_close": 100, "day_high": 110, "day_low": 90,
+                      "closes": [100], "source": "fixture"}}
+        wl = {"tickers": [{"symbol": "AAPL", "alerts": [{"type": "intraday_range_pct", "value": 5}]}]}
+        st = {"fired": {}}
+        self.assertEqual(len(alerts.run(wl, st, q, T("2026-10-15T10:00"))["alerts"]), 1)
+        self.assertEqual(alerts.run(wl, st, q, T("2026-10-15T15:00"))["alerts"], [])
+
+    def test_validate_new_types(self):
+        wl = {"tickers": [{"symbol": "AAPL", "alerts": [
+            {"type": "iv_above", "value": 40}, {"type": "intraday_range_pct", "value": 8}]}]}
+        self.assertEqual(wlm.validate(wl), [])
+
+    def test_cli_notify_file_not_on_dry_run(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "n.jsonl")
+        st = os.path.join(d, "s.json")
+        env = {"WATCHLIST_NOTIFY_FILE": path, "WATCHLIST_NOTIFY": "file"}
+        with mock.patch.dict(os.environ, env):
+            alerts.main(["--watchlist", WL, "--state", st, "--fixture", FX,
+                         "--now", "2026-10-15T10:00:00-04:00", "--notify", "file"])
+            self.assertTrue(os.path.exists(path) and os.path.getsize(path) > 0)
+            os.remove(path)
+            st2 = os.path.join(d, "s2.json")
+            alerts.main(["--watchlist", WL, "--state", st2, "--fixture", FX,
+                         "--now", "2026-10-15T10:00:00-04:00", "--dry-run", "--notify", "file"])
+            self.assertFalse(os.path.exists(path))
+
+    def test_tickers_with_iv_alerts(self):
+        wl = {"tickers": [{"symbol": "AAPL", "alerts": [{"type": "price_above", "value": 1}]},
+                          {"symbol": "NVDA", "alerts": [{"type": "iv_below", "value": 20}]}]}
+        self.assertEqual(alerts.tickers_with_iv_alerts(wl), {"NVDA"})
 
 
 if __name__ == "__main__":

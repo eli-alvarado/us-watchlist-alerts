@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml/badge.svg)](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml)
 
-Open-source **Agent Skills** for a **US stock watchlist and price alerts**: track tickers with a thesis, entry, targets and stop; get de-duplicated alerts on price levels, % moves, gaps, 52-week highs/lows, MA crosses, RSI, volume spikes and earnings; and get morning/close briefs. Aware of NYSE hours, pre/after-market, early closes and holidays, in US/Eastern time.
+Open-source **Agent Skills** for a **US stock watchlist and price alerts**: track tickers with a thesis, entry, targets and stop; get de-duplicated alerts on price levels, % moves, gaps, 52-week highs/lows, MA crosses, RSI, ATM IV, volume spikes, intraday range and earnings; optionally push them to ntfy, Slack, a webhook, or the Linux desktop; and get morning/close briefs. Aware of NYSE hours, pre/after-market, early closes and holidays, in US/Eastern time.
 
 Works in **Claude Code, Codex CLI, Cursor, Gemini CLI** and any agent that reads `SKILL.md`. **No API keys or MCP required.** Default path is the Python standard library plus the unofficial Yahoo Finance chart endpoint. `yfinance`, Alpaca, Finnhub, Alpha Vantage, `alpaca-mcp-server` and `tradingview-mcp` are optional.
 
@@ -17,11 +17,11 @@ Demo above is **offline**, driven by `tests/fixtures/` (the same data CI uses). 
 | Skill | What it does |
 |---|---|
 | [`watchlist-manager`](skills/watchlist-manager/SKILL.md) | Add, remove, update, list and validate tickers with thesis, entry, targets, stop, tags and alert rules (JSON/YAML schema) |
-| [`price-alerts`](skills/price-alerts/SKILL.md) | 20 alert types, latching, cooldowns, once-per-day events, session gating, NYSE calendar |
+| [`price-alerts`](skills/price-alerts/SKILL.md) | 23 alert types, latching, cooldowns, once-per-day events, session gating, NYSE calendar, optional notify sinks |
 | [`watchlist-brief`](skills/watchlist-brief/SKILL.md) | Morning or close summary: table, movers, distance to stop/target, upcoming earnings |
 | [`HEARTBEAT.md`](HEARTBEAT.md) | Checklist for a scheduled check that stays silent unless something new happens |
 
-Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `watchlist.py` (CRUD + validation), `brief.py`, `market_calendar.py`, `indicators.py`.
+Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation), `brief.py`, `market_calendar.py`, `indicators.py`.
 
 ## Quick start
 
@@ -37,11 +37,14 @@ python3 -m unittest discover -s tests      # offline, fixtures only
 Offline demo (no network, same output as the GIF):
 
 ```bash
-python3 scripts/alerts.py --watchlist tests/fixtures/watchlist.json \
-  --fixture tests/fixtures/quotes.json --now 2026-10-15T10:05:00-04:00 --state /tmp/wl-state.json
+WATCHLIST_NOTIFY_FILE=/tmp/alerts.jsonl python3 scripts/alerts.py \
+  --watchlist tests/fixtures/watchlist.json --fixture tests/fixtures/quotes.json \
+  --now 2026-10-15T10:05:00-04:00 --state /tmp/wl-state.json --notify file
 python3 scripts/brief.py --watchlist tests/fixtures/watchlist.json \
   --fixture tests/fixtures/quotes.json --kind morning --now 2026-10-15T08:30:00-04:00
 ```
+
+Set `WATCHLIST_NOTIFY_FILE=/tmp/alerts.jsonl` (or `WATCHLIST_NOTIFY=ntfy` plus `NTFY_TOPIC`) to actually deliver. The GIF uses the file sink so it stays offline.
 
 ## Example output
 
@@ -57,9 +60,10 @@ ALERT TSLA volume 3.0x 20-day avg
 ALERT TSLA RSI 28.8 <= 30
 ALERT TSLA reports earnings in 1 day(s) (2026-10-16)
 ALERT NVDA golden cross: SMA50 vs SMA200
+NOTIFY file /tmp/alerts.jsonl
 ```
 
-A second run in the same session prints `no new alerts` until a level re-arms or the next trading day (daily events). Agents running [HEARTBEAT.md](HEARTBEAT.md) stay silent when the list is empty.
+A second run in the same session prints `no new alerts` until a level re-arms or the next trading day (daily events). Agents running [HEARTBEAT.md](HEARTBEAT.md) stay silent when the list is empty. `--notify` / `WATCHLIST_NOTIFY` also stay silent on empty, skipped, and `--dry-run` runs.
 
 ### Watchlist brief (fixture, morning)
 
@@ -165,7 +169,37 @@ CRON_TZ=America/New_York
 10 16 * * 1-5      cd ~/us-watchlist-alerts && python3 scripts/brief.py --kind close
 ```
 
-`alerts.py` skips weekends, regular NYSE holidays, dates in [`data/holidays_overrides.json`](data/holidays_overrides.json), `settings.extra_closures` / `NYSE_EXTRA_CLOSURES`, and (when Alpaca keys are set) weekdays missing from Alpaca's official calendar.
+`alerts.py` skips weekends, regular NYSE holidays, dates in [`data/holidays_overrides.json`](data/holidays_overrides.json), `settings.extra_closures` / `NYSE_EXTRA_CLOSURES`, and (when Alpaca keys are set) weekdays missing from Alpaca's official calendar. That overlay is **disk-cached for the ET day** (`.nyse_calendar_cache.json`) so a 15-minute cron does not call `/v2/calendar` every tick.
+
+### Alert delivery (no auto-trade)
+
+Push **new** alerts off-box without involving a broker:
+
+```bash
+export WATCHLIST_NOTIFY=ntfy,slack          # any of: webhook, slack, ntfy, desktop, file
+export NTFY_TOPIC=my-watchlist              # default host https://ntfy.sh ; optional NTFY_URL / NTFY_TOKEN
+export SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+python3 scripts/alerts.py --notify          # or pass --notify ntfy
+```
+
+| Sink | Env | Notes |
+|---|---|---|
+| `webhook` | `WATCHLIST_WEBHOOK_URL` | JSON POST `{source, session, count, alerts, text}` |
+| `slack` | `SLACK_WEBHOOK_URL` | Incoming webhook `{"text": ...}` |
+| `ntfy` | `NTFY_TOPIC` (+ `NTFY_URL`, `NTFY_TOKEN`) | Phone / desktop via [ntfy](https://ntfy.sh) |
+| `desktop` | — | Linux `notify-send` only |
+| `file` | `WATCHLIST_NOTIFY_FILE` | JSONL, good for tests and local logs |
+
+A downed sink prints `WARN notify …` and the rest still run. This is not order routing.
+
+### Multiple watchlists
+
+`WATCHLIST_FILE` already picks the list; give each profile its own state file so latches do not collide:
+
+```bash
+WATCHLIST_FILE=swing.json ALERT_STATE_FILE=.alert_state_swing.json python3 scripts/alerts.py --notify
+WATCHLIST_FILE=long.json  ALERT_STATE_FILE=.alert_state_long.json  python3 scripts/alerts.py --notify
+```
 
 ## Configuration
 
@@ -177,6 +211,12 @@ CRON_TZ=America/New_York
 | `WATCHLIST_STALE_AFTER` | Seconds before a regular-session quote is flagged stale (default `900`; `0`=off) |
 | `WATCHLIST_HTTP_TIMEOUT` | HTTP timeout seconds (default `15`) |
 | `NYSE_EXTRA_CLOSURES` | Comma-separated ISO dates for unscheduled full-day closures |
+| `NYSE_CALENDAR_CACHE` | Official calendar cache path (default `./.nyse_calendar_cache.json`) |
+| `WATCHLIST_NOTIFY` | Comma-separated sinks: `webhook`, `slack`, `ntfy`, `desktop`, `file` |
+| `WATCHLIST_WEBHOOK_URL` | Generic JSON webhook |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook |
+| `NTFY_TOPIC` / `NTFY_URL` / `NTFY_TOKEN` | ntfy topic, server (default `https://ntfy.sh`), optional bearer token |
+| `WATCHLIST_NOTIFY_FILE` | JSONL path for the `file` sink |
 | `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` | Official Alpaca snapshot + daily bars + trading calendar |
 | `ALPACA_API_BASE` | Trading API host for the calendar (default `https://paper-api.alpaca.markets`) |
 | `FINNHUB_API_KEY` | Optional Finnhub quotes, candles, and earnings calendar |
@@ -201,18 +241,19 @@ Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ## How the anti-spam works
 
-- **Level alerts** (price, stop, target, RSI) latch after firing and re-arm only after price moves back through the level by `rearm_pct`.
+- **Level alerts** (price, stop, target, RSI, ATM IV) latch after firing and re-arm only after the condition clears (price/IV hysteresis via `rearm_pct` for price levels).
 - Each **target** is its own latch, so hitting T1 does not hide T2.
-- **Event alerts** (gaps, % moves, volume, crosses, 52-week highs/lows, earnings) fire at most once per trading day.
+- **Event alerts** (gaps, % moves, volume, crosses, 52-week highs/lows, earnings, intraday range) fire at most once per trading day.
 - A **cooldown** applies to every re-fire. `max_alerts_per_run` caps what is printed; omitted alerts are **not** latched, so the next run can emit them.
 
 ## Limitations
 
-- **Unscheduled closures** use a bundled list (`data/holidays_overrides.json`, incomplete), plus env/settings overrides, plus an optional Alpaca official calendar overlay. The rule-based table still does not invent mourning days on its own.
+- **Unscheduled closures** use a bundled list (`data/holidays_overrides.json`, incomplete), plus env/settings overrides, plus an optional Alpaca official calendar overlay (day-cached). The rule-based table still does not invent mourning days on its own.
 - **Earnings dates** no longer require yfinance, but Yahoo/Finnhub/AV calendars can be wrong or empty. Confirm against issuer IR.
-- The **Yahoo chart / quoteSummary endpoints are unofficial** and best-effort. They can change, rate-limit, or return delayed quotes (~15 minutes).
+- The **Yahoo chart / quoteSummary / options endpoints are unofficial** and best-effort. They can change, rate-limit, or return delayed quotes (~15 minutes). ATM IV is nearest-expiry only; there is no IV rank.
+- `intraday_range_pct` needs provider `day_high`/`day_low`. It will not fake a range from the daily close series.
 - Alpaca/Finnhub history depends on bars/candles succeeding; if those calls fail, MA/RSI/52-week rules will not fire even though the last price is present.
-- US-listed equities and ETFs only. No order routing.
+- US-listed equities and ETFs only. No order routing. `notify-send` is Linux-only; use ntfy on macOS/Windows.
 
 Full write-up: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Changelog: [CHANGELOG.md](CHANGELOG.md).
 
@@ -243,7 +284,7 @@ No network, no extra pip packages. GitHub Actions runs that command on Python 3.
 ## Contributing and growth
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — tests, PR bar, good first issues
-- [GROWTH_PLAN.md](GROWTH_PLAN.md) — marketplaces, awesome-lists, launch posts, v0.3
+- [GROWTH_PLAN.md](GROWTH_PLAN.md) — marketplaces, awesome-lists, launch posts, v0.4
 - [docs/LIMITATIONS.md](docs/LIMITATIONS.md)
 
 MIT © 2026 Eli Alvarado

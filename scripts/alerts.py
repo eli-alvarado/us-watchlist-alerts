@@ -2,13 +2,14 @@
 
 python scripts/alerts.py --watchlist watchlist.json --state .alert_state.json [--fixture f.json]
        [--now 2026-10-15T10:00:00-04:00] [--force-session] [--dry-run] [--format json|text]
+       [--notify [ntfy,slack,webhook,desktop,file]]
 
 Exit code 0 always on success; output lists only NEW alerts (already-fired ones in cooldown are suppressed).
 """
 from __future__ import annotations
 import argparse, datetime as dt, json, os, sys
 sys.path.insert(0, os.path.dirname(__file__))
-import indicators as ind, market_calendar as mc, quotes as qt, watchlist as wlm
+import indicators as ind, market_calendar as mc, notify, quotes as qt, watchlist as wlm
 
 DEFAULTS = {"cooldown_minutes": 240, "rearm_pct": 0.5, "sessions": ["regular"],
             "volume_spike_multiple": 2.0, "near_52w_pct": 2.0, "rsi_period": 14,
@@ -66,8 +67,25 @@ def evaluate_rule(rule, t, q, cfg):
         if x and typ == f"cross_{x}_ma": return True, f"{sym} crossed {x} its {n}-day SMA (${ind.sma(series, n):.2f})", f"{typ}:{n}"
     if typ in ("rsi_above", "rsi_below"):
         r = ind.rsi(series, rule.get("period", cfg["rsi_period"]))
-        if r is not None and ((typ == "rsi_above" and r >= v) or (typ == "rsi_below" and r <= v)):
+        if r is not None and v is not None and ((typ == "rsi_above" and r >= v) or (typ == "rsi_below" and r <= v)):
             return True, f"{sym} RSI {r:.1f} {'>=' if typ=='rsi_above' else '<='} {v:g}", typ
+    if typ in ("iv_above", "iv_below"):
+        iv = q.get("atm_iv")
+        if iv is None or iv <= 0 or v is None:
+            return False, "", typ
+        if (typ == "iv_above" and iv >= v) or (typ == "iv_below" and iv <= v):
+            extra = f" (exp {q['iv_expiry']})" if q.get("iv_expiry") else ""
+            return True, f"{sym} ATM IV {iv:.1f}% {'>=' if typ=='iv_above' else '<='} {v:g}{extra}", typ
+    if typ == "intraday_range_pct":
+        hi, lo = q.get("day_high"), q.get("day_low")
+        if hi is None or lo is None or lo <= 0 or v is None:
+            return False, "", typ
+        base = pc if pc else lo
+        if not base:
+            return False, "", typ
+        rng = (hi - lo) / base * 100
+        if rng >= v:
+            return True, f"{sym} intraday range {rng:.1f}% (H ${hi:.2f} / L ${lo:.2f})", typ
     if typ == "volume_spike":
         avg = q.get("avg_volume_20d"); vol = q.get("volume"); m = v or cfg["volume_spike_multiple"]
         if avg and vol is not None and vol >= m * avg:
@@ -124,7 +142,7 @@ def save_state(state, path):
 
 def should_emit(state, key, now, cooldown_min, trading_date):
     """Anti-spam rules for an alert key that is currently firing:
-    - level alerts (price/stop/target/RSI...) stay latched until price re-arms (moves back past the
+    - level alerts (price/stop/target/RSI/IV...) stay latched until price re-arms (moves back past the
       level by rearm_pct), so a stock hovering at a level never re-alerts;
     - daily-event alerts (gaps, % moves, volume, crosses, 52w, earnings) fire at most once per trading day;
     - any alert respects cooldown_minutes since its last fire.
@@ -142,7 +160,8 @@ def should_emit(state, key, now, cooldown_min, trading_date):
 
 
 DAILY = {"pct_change_up", "pct_change_down", "pct_move", "gap_up", "gap_down", "volume_spike",
-         "new_52w_high", "new_52w_low", "golden_cross", "death_cross", "cross_above_ma", "cross_below_ma", "earnings_within"}
+         "new_52w_high", "new_52w_low", "golden_cross", "death_cross", "cross_above_ma", "cross_below_ma",
+         "earnings_within", "intraday_range_pct"}
 
 
 def run(wl, state, quotes_by_sym, now, force_session=False, stale_after=None):
@@ -183,7 +202,7 @@ def run(wl, state, quotes_by_sym, now, force_session=False, stale_after=None):
                     if (k == prefix or k.startswith(prefix + ":")) and rec.get("active"):
                         lvl = k.split(":", 1)[1] if ":" in k else None
                         lvl = float(lvl) if lvl not in (None, "None") else None
-                        if r["type"].startswith("rsi") or lvl is None or abs(_pct(q["price"], lvl)) >= cfg["rearm_pct"]:
+                        if r["type"].startswith(("rsi", "iv")) or lvl is None or abs(_pct(q["price"], lvl)) >= cfg["rearm_pct"]:
                             rec["active"] = False
     stale = []
     if stale_after:
@@ -201,6 +220,15 @@ def run(wl, state, quotes_by_sym, now, force_session=False, stale_after=None):
     return res
 
 
+def tickers_with_iv_alerts(wl):
+    out = set()
+    for t in wl.get("tickers") or []:
+        for r in t.get("alerts") or []:
+            if str(r.get("type") or "").startswith("iv_"):
+                out.add(t["symbol"])
+    return out
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--watchlist", default=wlm.DEFAULT_PATH)
@@ -212,6 +240,9 @@ def main(argv=None):
     ap.add_argument("--format", choices=["json", "text"], default="text")
     ap.add_argument("--stale-after", type=int, default=None,
                     help="warn if quote as_of is older than N seconds during regular hours (0=off)")
+    ap.add_argument("--notify", nargs="?", const="env", default=None,
+                    help="deliver new alerts (comma sinks: webhook,slack,ntfy,desktop,file). "
+                         "Omit the value to use WATCHLIST_NOTIFY. Skipped on dry-run / empty / outside session.")
     a = ap.parse_args(argv)
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
     if now.tzinfo is None: now = now.replace(tzinfo=mc.ET)
@@ -221,10 +252,16 @@ def main(argv=None):
         print(f"WARN official NYSE overlay skipped: {e}", file=sys.stderr)
     wl = wlm.load(a.watchlist); state = load_state(a.state)
     warn = state.pop("warning", None)
+    iv_syms = tickers_with_iv_alerts(wl)
     quotes = {}
     for t in wl["tickers"]:
-        try: quotes[t["symbol"]] = qt.get_quote(t["symbol"], a.provider, a.fixture)
-        except Exception as e: quotes[t["symbol"]] = {"error": str(e)}
+        try:
+            q = qt.get_quote(t["symbol"], a.provider, a.fixture)
+            if t["symbol"] in iv_syms and q.get("atm_iv") is None and not a.fixture:
+                qt.attach_iv(q)
+            quotes[t["symbol"]] = q
+        except Exception as e:
+            quotes[t["symbol"]] = {"error": str(e)}
     stale_after = a.stale_after
     if stale_after is None:
         env = os.environ.get("WATCHLIST_STALE_AFTER")
@@ -233,6 +270,14 @@ def main(argv=None):
     if warn:
         res["state_warning"] = warn
     if not a.dry_run and not res["skipped"]: save_state(state, a.state)
+    sinks = a.notify
+    if sinks is None and os.environ.get("WATCHLIST_NOTIFY"):
+        sinks = "env"
+    if sinks and notify.should_deliver(res, dry_run=a.dry_run):
+        try:
+            res["notify"] = notify.deliver(res, sinks=sinks)
+        except Exception as e:
+            res["notify"] = [{"sink": "notify", "ok": False, "error": str(e)}]
     if a.format == "json":
         print(json.dumps(res, indent=2))
     else:
@@ -247,6 +292,12 @@ def main(argv=None):
         for e in res["errors"]: print(f"WARN {e['symbol']}: {e['error']}", file=sys.stderr)
         for s in res.get("stale") or []:
             print(f"WARN {s['symbol']}: quote is {s['age_seconds']}s old (as_of {s.get('as_of')}, source={s.get('source')})", file=sys.stderr)
+        for n in res.get("notify") or []:
+            if n.get("ok"):
+                extra = f" {n['detail']}" if n.get("detail") else ""
+                print(f"NOTIFY {n['sink']}{extra}")
+            else:
+                print(f"WARN notify {n.get('sink')}: {n.get('error')}", file=sys.stderr)
     return 0
 
 

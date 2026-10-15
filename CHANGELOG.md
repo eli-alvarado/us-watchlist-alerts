@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — 2026-10-15
+
+Alert delivery, ATM IV / intraday-range rules, and a cheaper official calendar.
+
+- **Notify sinks:** `scripts/notify.py` plus `alerts.py --notify`. Env `WATCHLIST_NOTIFY=webhook,slack,ntfy,desktop,file`. JSON webhook (`WATCHLIST_WEBHOOK_URL`), Slack incoming webhook (`SLACK_WEBHOOK_URL`), ntfy (`NTFY_TOPIC` / `NTFY_URL` / `NTFY_TOKEN`), Linux `notify-send`, JSONL file (`WATCHLIST_NOTIFY_FILE`). Empty, skipped, and `--dry-run` runs do not deliver. A sink failure is a `WARN`, not a crash. Still never places trades.
+- **ATM IV alerts:** `iv_above` / `iv_below` use unofficial Yahoo `v7/finance/options` nearest-expiry ATM call/put IV (percent). Fetched only for tickers that have those rules, skipped when IV is missing or zero. No IV rank, unusual-options flow, or Black-Scholes.
+- **Intraday range:** `intraday_range_pct` fires from provider `day_high` / `day_low` only — never invented from daily closes.
+- **Calendar disk cache:** Alpaca `/v2/calendar` is stored in `.nyse_calendar_cache.json` (override `NYSE_CALENDAR_CACHE`) for the ET day so HEARTBEAT ticks do not hit the API every 15 minutes. Same-year stale cache is reused if today's fetch fails.
+- Demo GIF refreshed to show `NOTIFY file`. Multi-watchlist profiles documented.
+
 ## 0.2.0 — 2026-10-15
 
 Make the heartbeat loop trustworthy: closures, earnings without yfinance, official data when keyed.
