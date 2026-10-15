@@ -8,6 +8,8 @@ description: Check a US stock watchlist for price alerts - price above/below, % 
 Evaluates alert rules from the watchlist (see `watchlist-manager`) against fresh quotes and reports **only new** alerts.
 **Not financial advice. Never place, modify or cancel orders** - even if an alert fires, even if a broker tool is connected, unless the user explicitly confirms that specific order in this conversation.
 
+Scripts live in the GitHub repo (`scripts/alerts.py`), not inside a `npx skills add` copy of this file. If `scripts/` is missing, clone https://github.com/eli-alvarado/us-watchlist-alerts and run from that root.
+
 ## Run it
 ```bash
 python scripts/alerts.py --watchlist watchlist.json --state .alert_state.json            # text output

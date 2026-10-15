@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1 — 2026-10-15
+
+Live Yahoo path: do not treat `chartPreviousClose` as yesterday's close (it is the print before the chart range, so a 1y chart produced fake +16–37% daily moves). `prev_close` is now `previousClose` / `regularMarketPreviousClose`, else the prior daily bar. `as_of` uses `regularMarketTime` when present. quoteSummary / options attach a Yahoo crumb + cookies when Yahoo will mint one (those endpoints 401 without it).
+
 ## 0.3.0 — 2026-10-15
 
 Alert delivery, ATM IV / intraday-range rules, and a cheaper official calendar.

@@ -57,7 +57,7 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 
 - [x] CI on Python 3.10–3.13 (`python3 -m unittest discover -s tests`)
 - [x] CONTRIBUTING.md, issue templates, limitations doc
-- [x] CHANGELOG.md (0.1.0 / 0.2.0 / 0.3.0)
+- [x] CHANGELOG.md (0.1.0 / 0.2.0 / 0.3.0 / 0.3.1)
 - [x] GitHub release v0.2.0
 - [ ] File 3–5 **good first issues** (see CONTRIBUTING.md) so the repo looks open, not a dump
 - [ ] Pin a discussion or README FAQ: delayed data, unofficial Yahoo, no China listings

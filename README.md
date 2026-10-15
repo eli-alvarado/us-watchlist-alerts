@@ -25,13 +25,26 @@ Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher wit
 
 ## Quick start
 
+One line to get a runnable clone (scripts are stdlib; this is the install that can actually fetch quotes):
+
 ```bash
-git clone https://github.com/eli-alvarado/us-watchlist-alerts && cd us-watchlist-alerts
+git clone --depth 1 https://github.com/eli-alvarado/us-watchlist-alerts && cd us-watchlist-alerts
+```
+
+Then:
+
+```bash
 cp examples/watchlist.json watchlist.json
 python3 scripts/quotes.py AAPL NVDA
 python3 scripts/alerts.py --force-session
 python3 scripts/brief.py --kind morning
 python3 -m unittest discover -s tests      # offline, fixtures only
+```
+
+Agent-skills one-liner (installs the three `SKILL.md` files; you still need the clone above for `scripts/`):
+
+```bash
+npx skills add eli-alvarado/us-watchlist-alerts -y
 ```
 
 Offline demo (no network, same output as the GIF):
@@ -91,10 +104,10 @@ The skills call `python scripts/...` relative to the **repo root**, so install t
 Universal installer, if you use [skills.sh](https://skills.sh):
 
 ```bash
-npx skills add eli-alvarado/us-watchlist-alerts
+npx skills add eli-alvarado/us-watchlist-alerts -y
 ```
 
-Pass `-a claude-code`, `-a cursor`, `-a copilot`, or `-a gemini-cli` when you want a specific agent path.
+That command works (verified: finds `price-alerts`, `watchlist-brief`, `watchlist-manager`). It copies `SKILL.md` only — the evaluator scripts are not in that tree. Clone the repo (or pass `-a claude-code` / `-a cursor` / `-a copilot` / `-a gemini-cli`) and run `python3 scripts/...` from the clone.
 
 ### Claude Code
 

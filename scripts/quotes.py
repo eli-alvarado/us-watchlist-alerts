@@ -6,7 +6,9 @@ Fallback order for ``provider=auto`` (first success wins):
 2. Alpaca snapshot + daily bars, if ``ALPACA_API_KEY_ID`` + ``ALPACA_API_SECRET_KEY``
    (official US feed; history included when bars succeed)
 3. ``yfinance`` if the package is importable
-4. Yahoo public chart API (stdlib, unofficial, best-effort) — ``query1`` then ``query2``
+4. Yahoo public chart API (stdlib, unofficial, best-effort) — ``query1`` then ``query2``.
+   Do not use ``chartPreviousClose`` as yesterday's close (it is the print before the
+   chart range). Prior session comes from ``previousClose`` or the previous daily bar.
 5. Finnhub quote + candles, if ``FINNHUB_API_KEY`` is set
 6. Alpha Vantage daily, if ``ALPHAVANTAGE_API_KEY`` is set
 
@@ -27,12 +29,16 @@ Normalized quote dict: see ``QUOTE_FIELDS``.
 CLI: python scripts/quotes.py AAPL MSFT [--fixture tests/fixtures/quotes.json] [--provider yahoo]
 """
 from __future__ import annotations
-import argparse, datetime as dt, json, os, sys, time, urllib.error, urllib.parse, urllib.request
+import argparse, datetime as dt, http.cookiejar, json, os, sys, time, urllib.error, urllib.parse, urllib.request
+from zoneinfo import ZoneInfo
 
 UA = {
     "User-Agent": "us-watchlist-alerts/0.3 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
 }
 YAHOO_HOSTS = ("query1.finance.yahoo.com", "query2.finance.yahoo.com")
+_ET = ZoneInfo("America/New_York")
+_yahoo_jar = None
+_yahoo_crumb = None
 QUOTE_FIELDS = (
     "symbol", "price", "prev_close", "open", "day_high", "day_low", "volume",
     "avg_volume_20d", "high_52w", "low_52w", "closes", "earnings_date",
@@ -88,10 +94,20 @@ def _request(url, method="GET", data=None, headers=None, timeout=None, retries=2
     hdrs = {**UA, **(headers or {})}
     timeout = _timeout() if timeout is None else timeout
     body, hdrs = _encode_body(data, hdrs)
+    opener = None
+    if method == "GET" and any(h in url for h in YAHOO_HOSTS) and any(
+        p in url for p in ("quoteSummary", "/v7/finance/options")
+    ):
+        try:
+            opener, crumb = _yahoo_session()
+            url = _yahoo_url(url, crumb)
+        except Exception:
+            opener = None
+    open_fn = opener.open if opener is not None else urllib.request.urlopen
     for attempt in range(retries + 1):
         try:
             req = urllib.request.Request(url, data=body, headers=hdrs, method=method)
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            with open_fn(req, timeout=timeout) as r:
                 resp = r.read()
             if raw:
                 return resp
@@ -233,6 +249,93 @@ def _aligned_ohlcv(quote_ind):
     return closes, vols, opens, n
 
 
+def _chart_prev_close(meta, closes, timestamps=None, price=None, now=None):
+    """Yesterday's session close.
+
+    Yahoo's ``chartPreviousClose`` is the close *before the requested range*
+    (so a 1y chart returns a year-ago print). Prefer an explicit previousClose,
+    then the daily bar before today's session.
+    """
+    meta = meta or {}
+    for key in ("previousClose", "regularMarketPreviousClose"):
+        if meta.get(key) is not None:
+            return meta[key]
+    if not closes:
+        return meta.get("chartPreviousClose")
+    last_is_today = False
+    if timestamps:
+        try:
+            last = dt.datetime.fromtimestamp(int(timestamps[-1]), dt.timezone.utc).astimezone(_ET)
+            today = (now or dt.datetime.now(_ET)).astimezone(_ET).date()
+            last_is_today = last.date() == today
+        except (TypeError, ValueError, OSError, OverflowError):
+            last_is_today = False
+    if not last_is_today and price is not None and len(closes) > 1:
+        # No usable timestamp: last bar matching last price is almost always today's developing close.
+        try:
+            last_is_today = abs(float(closes[-1]) - float(price)) <= max(0.01, abs(float(price)) * 1e-4)
+        except (TypeError, ValueError):
+            last_is_today = False
+    if last_is_today and len(closes) > 1:
+        return closes[-2]
+    return closes[-1]
+
+
+def _as_of_from_meta(meta):
+    ts = (meta or {}).get("regularMarketTime")
+    if ts is None:
+        return None
+    try:
+        return dt.datetime.fromtimestamp(int(ts), dt.timezone.utc).isoformat(timespec="seconds")
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
+
+
+def _reset_yahoo_session():
+    global _yahoo_jar, _yahoo_crumb
+    _yahoo_jar = None
+    _yahoo_crumb = None
+
+
+def _yahoo_session():
+    """Cookie jar + crumb for unofficial Yahoo endpoints that 401 without them.
+
+    Chart works without this. quoteSummary and options often do not.
+    Failures return ``(opener, None)`` so callers can still try unauthenticated.
+    """
+    global _yahoo_jar, _yahoo_crumb
+    if _yahoo_jar is None:
+        _yahoo_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(_yahoo_jar))
+    if _yahoo_crumb:
+        return opener, _yahoo_crumb
+    try:
+        req = urllib.request.Request("https://finance.yahoo.com", headers=UA)
+        with opener.open(req, timeout=_timeout()) as r:
+            r.read()
+    except Exception:
+        pass
+    for host in YAHOO_HOSTS:
+        url = f"https://{host}/v1/test/getcrumb"
+        try:
+            req = urllib.request.Request(url, headers={**UA, "Accept": "text/plain,*/*"})
+            with opener.open(req, timeout=_timeout()) as r:
+                crumb = r.read().decode().strip()
+            if crumb and "html" not in crumb.lower() and len(crumb) < 80:
+                _yahoo_crumb = crumb
+                return opener, _yahoo_crumb
+        except Exception:
+            continue
+    return opener, None
+
+
+def _yahoo_url(url, crumb=None):
+    if not crumb or "crumb=" in url:
+        return url
+    sep = "&" if "?" in url else "?"
+    return url + sep + "crumb=" + urllib.parse.quote(crumb)
+
+
 def from_yahoo(symbol):
     s = urllib.parse.quote(symbol.upper())
     errors = []
@@ -255,12 +358,10 @@ def from_yahoo(symbol):
     m = r.get("meta") or {}
     ind = (r.get("indicators") or {}).get("quote") or [{}]
     closes, vols, opens, _ = _aligned_ohlcv(ind[0] if ind else {})
-    prev = m.get("chartPreviousClose") or m.get("previousClose")
-    if prev is None and len(closes) > 1:
-        prev = closes[-2]
     price = m.get("regularMarketPrice")
     if price is None and closes:
         price = closes[-1]
+    prev = _chart_prev_close(m, closes, timestamps=r.get("timestamp"), price=price)
     opn = m.get("regularMarketOpen")
     if opn is None:
         opn = opens[-1] if opens else None
@@ -270,6 +371,9 @@ def from_yahoo(symbol):
          "day_low": m.get("regularMarketDayLow"), "volume": m.get("regularMarketVolume"),
          "high_52w": m.get("fiftyTwoWeekHigh"), "low_52w": m.get("fiftyTwoWeekLow"),
          "closes": closes, "_volumes": vols, "source": "yahoo-chart"}
+    as_of = _as_of_from_meta(m)
+    if as_of:
+        q["as_of"] = as_of
     return _finish(q)
 
 

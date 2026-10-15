@@ -42,6 +42,10 @@ Auto fallback (`WATCHLIST_PROVIDER=auto` / `--provider auto`), first success win
 
 Yahoo hosts are unofficial and can change, rate-limit, or require cookies. Free Yahoo / yfinance quotes may be delayed ~15 minutes. HTTP calls retry 429/5xx; failures raise `QuoteError` with provider, status, and a hint.
 
+**Yahoo `chartPreviousClose` is not yesterday's close.** On a 1-year daily chart it is the print before the range (often ~12 months old). This repo uses `previousClose` / `regularMarketPreviousClose` when present, otherwise the prior daily bar. `as_of` prefers `regularMarketTime`.
+
+**Yahoo `quoteSummary` (earnings) and `v7/finance/options` (ATM IV)** return HTTP 401 `Invalid Crumb` unless a cookie + crumb session can be minted (`/v1/test/getcrumb` after `finance.yahoo.com`). That crumb endpoint 429s easily. When crumb minting fails, `earnings_date` and `atm_iv` stay null and those rules skip — they do not invent values. The daily chart path does not need a crumb and is the default no-key quote source.
+
 `--provider` / `WATCHLIST_PROVIDER` pins a single provider and does not fall through.
 
 ## Quote dict fields

@@ -325,6 +325,33 @@ class Quotes(unittest.TestCase):
         self.assertEqual(q["open"], 10.1)
         self.assertEqual(q["source"], "yahoo-chart")
         self.assertEqual(q["price"], 10.5)
+
+    def test_yahoo_ignores_chart_previous_close_range_start(self):
+        """chartPreviousClose on a 1y chart is the close before the range, not yesterday."""
+        payload = {
+            "chart": {"result": [{
+                "meta": {
+                    "regularMarketPrice": 342.0,
+                    "chartPreviousClose": 249.34,
+                    "regularMarketOpen": 346.95,
+                    "regularMarketTime": 1792094401,
+                },
+                "timestamp": [1791898200, 1791984600, 1792071000],
+                "indicators": {"quote": [{"close": [336.64, 340.97, 342.0], "volume": [1, 2, 3],
+                                          "open": [340, 344, 346.95]}]},
+            }]}
+        }
+        with mock.patch.object(qt, "_get", return_value=payload):
+            q = qt.from_yahoo("AAPL")
+        self.assertAlmostEqual(q["prev_close"], 340.97)
+        self.assertNotAlmostEqual(q["prev_close"], 249.34)
+        self.assertEqual(q["as_of"], "2026-10-15T20:00:01+00:00")
+
+    def test_chart_prev_close_helpers(self):
+        self.assertEqual(qt._chart_prev_close({"previousClose": 10}, [1, 2, 3]), 10)
+        self.assertEqual(qt._chart_prev_close({"chartPreviousClose": 5}, [9, 10, 10.5], price=10.5), 10)
+        self.assertEqual(qt._chart_prev_close({"chartPreviousClose": 5}, [9, 10], price=12), 10)
+        self.assertEqual(qt._as_of_from_meta({}), None)
     def test_yahoo_retries_query2(self):
         payload = {
             "chart": {"result": [{

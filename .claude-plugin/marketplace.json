@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "US stock watchlists and price alerts for Claude Code, Codex, Cursor, and Gemini CLI.",
-    "version": "0.3.0"
+    "version": "0.3.1"
   },
   "plugins": [
     {
       "name": "us-watchlist-alerts",
       "source": "./",
       "description": "Watchlist manager, NYSE-aware price alerts, and morning/close briefs. Python stdlib plus optional yfinance.",
-      "version": "0.3.0"
+      "version": "0.3.1"
     }
   ]
 }
