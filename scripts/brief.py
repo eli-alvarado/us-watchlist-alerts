@@ -64,6 +64,17 @@ def render(wl, quotes, kind, now):
     if earn:
         lines.append("**Earnings dates:** " + ", ".join(x for _, x in earn))
     if errs: lines.append("**Data unavailable:** " + ", ".join(errs))
+    stale = []
+    for t in wl["tickers"]:
+        q = quotes.get(t["symbol"])
+        if not q or "error" in q:
+            continue
+        age = qt.quote_age_seconds(q, now)
+        limit = (wl.get("settings") or {}).get("stale_after_seconds", 900)
+        if limit and age is not None and age > limit and mc.session(now, extra=extra) == "regular":
+            stale.append(t["symbol"])
+    if stale:
+        lines.append("**Stale quotes:** " + ", ".join(stale) + " (as_of older than settings.stale_after_seconds)")
     src = ", ".join(sorted(sources)) if sources else "unknown"
     lines += ["", f"_Data: {src}. Informational only - not financial advice._"]
     return "\n".join(lines)
@@ -77,6 +88,10 @@ def main(argv=None):
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
     if now.tzinfo is None:
         now = now.replace(tzinfo=mc.ET)
+    try:
+        mc.refresh_official_calendar(now.year)
+    except Exception as e:
+        print(f"WARN official NYSE overlay skipped: {e}", file=sys.stderr)
     wl = wlm.load(a.watchlist); quotes = {}
     for t in wl["tickers"]:
         try: quotes[t["symbol"]] = qt.get_quote(t["symbol"], a.provider, a.fixture)

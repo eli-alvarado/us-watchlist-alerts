@@ -1,4 +1,4 @@
-import copy, datetime as dt, json, os, sys, tempfile, unittest, warnings
+import copy, datetime as dt, io, json, os, sys, tempfile, unittest, urllib.error, warnings
 from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -12,6 +12,8 @@ def quotes(): return {s: qt.get_quote(s, fixture=FX) for s in ("AAPL", "TSLA", "
 
 
 class Calendar(unittest.TestCase):
+    def tearDown(self):
+        mc.clear_official_closures()
     def test_holidays_2026(self):
         h = mc.nyse_holidays(2026)
         for d in ["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19",
@@ -48,6 +50,29 @@ class Calendar(unittest.TestCase):
             self.assertEqual(mc.next_trading_day(dt.date(2026, 10, 14)), dt.date(2026, 10, 16))
     def test_extra_closures_arg(self):
         self.assertFalse(mc.is_trading_day(dt.date(2026, 10, 15), extra=["2026-10-15"]))
+    def test_bundled_unscheduled_closures(self):
+        carter = dt.date(2025, 1, 9)
+        self.assertFalse(mc.is_trading_day(carter))
+        self.assertIn("Carter", mc.holiday_name(carter))
+        self.assertEqual(mc.session(T("2025-01-09T10:00")), "closed")
+        self.assertIn(dt.date(2012, 10, 29), mc.bundled_overrides())
+    def test_official_calendar_overlay(self):
+        # 2026-10-15 is a normal Thursday; missing it from the official open set closes it.
+        mapping = mc.closures_from_trading_days(2026, {dt.date(2026, 10, 16)})
+        self.assertIn(dt.date(2026, 10, 15), mapping)
+        mc.set_official_closures({dt.date(2026, 10, 15): "official calendar (market closed)"})
+        self.assertFalse(mc.is_trading_day(dt.date(2026, 10, 15)))
+        self.assertEqual(mc.holiday_name(dt.date(2026, 10, 15)), "official calendar (market closed)")
+        mc.clear_official_closures()
+        self.assertTrue(mc.is_trading_day(dt.date(2026, 10, 15)))
+    def test_refresh_official_calendar_uses_fetch(self):
+        rows = [{"date": "2026-10-16"}]
+        closed = mc.refresh_official_calendar(2026, fetch=lambda year: rows)
+        self.assertIn(dt.date(2026, 10, 15), closed)
+        mc.clear_official_closures()
+    def test_refresh_official_noop_without_keys(self):
+        with mock.patch.dict(os.environ, {"ALPACA_API_KEY_ID": "", "ALPACA_API_SECRET_KEY": ""}):
+            self.assertEqual(mc.refresh_official_calendar(2026), {})
 
 
 class Indicators(unittest.TestCase):
@@ -183,6 +208,14 @@ class Alerts(unittest.TestCase):
         self.assertNotIn("NVDA|price_above:1", st["fired"])
         second = alerts.run(wl, st, self.q, T("2026-10-15T10:01"))
         self.assertEqual([a["symbol"] for a in second["alerts"]], ["NVDA"])
+    def test_stale_quote_during_regular_session(self):
+        q = copy.deepcopy(self.q)
+        q["AAPL"]["as_of"] = "2026-10-15T13:00:00+00:00"  # 10:00 ET minus ~1h from 10:00 ET? 13:00Z = 9:00 ET
+        # now is 10:00 ET = 14:00 UTC; age ~3600s
+        res = alerts.run(self.wl, {"fired": {}}, q, T("2026-10-15T10:00"), stale_after=600)
+        self.assertTrue(any(s["symbol"] == "AAPL" for s in res["stale"]))
+        quiet = alerts.run(self.wl, {"fired": {}}, q, T("2026-10-15T10:00"), stale_after=0)
+        self.assertEqual(quiet["stale"], [])
     def test_missing_quote_reported(self):
         wl = {"tickers": [{"symbol": "ZZZZ", "alerts": [{"type": "price_above", "value": 1}]}]}
         res = alerts.run(wl, {"fired": {}}, {"ZZZZ": {"error": "not found"}}, T("2026-10-15T10:00"))
@@ -245,7 +278,7 @@ class Quotes(unittest.TestCase):
         self.assertAlmostEqual(q["price"], 241.5)
         self.assertIsNotNone(q["avg_volume_20d"] or True)
     def test_missing_fixture_symbol(self):
-        with self.assertRaises(KeyError):
+        with self.assertRaises(qt.QuoteError):
             qt.from_fixture("ZZZZ", FX)
     def test_unknown_provider(self):
         with self.assertRaises(RuntimeError) as ctx:
@@ -326,7 +359,90 @@ class Quotes(unittest.TestCase):
             calendar = Frame()
             earnings_dates = None
         self.assertEqual(qt._yfinance_earnings_date(Ticker2()), "2026-12-01")
+        self.assertEqual(qt._first_iso_date({"raw": 1761696000, "fmt": "2025-10-28"}), "2025-10-28")
+
+    def test_yahoo_earnings_parser(self):
+        payload = {"quoteSummary": {"result": [{"calendarEvents": {"earnings": {
+            "earningsDate": [{"raw": 1793145600, "fmt": "2026-10-28"}]
+        }}}]}}
+        with mock.patch.object(qt, "_get", return_value=payload):
+            self.assertEqual(qt.earnings_from_yahoo("AAPL"), "2026-10-28")
+
+    def test_finnhub_earnings_parser(self):
+        payload = {"earningsCalendar": [
+            {"date": "2026-10-20", "symbol": "AAPL"},
+            {"date": "2026-11-02", "symbol": "AAPL"},
+        ]}
+        with mock.patch.dict(os.environ, {"FINNHUB_API_KEY": "k"}):
+            with mock.patch.object(qt, "_get", return_value=payload):
+                self.assertEqual(qt.earnings_from_finnhub("AAPL", as_of_date=dt.date(2026, 10, 15)), "2026-10-20")
+
+    def test_lookup_earnings_fallback_order(self):
+        with mock.patch.object(qt, "earnings_from_yahoo", return_value=None), \
+             mock.patch.object(qt, "earnings_from_finnhub", return_value="2026-11-15"), \
+             mock.patch.dict(os.environ, {"FINNHUB_API_KEY": "k"}):
+            ed, src = qt.lookup_earnings("AAPL")
+        self.assertEqual((ed, src), ("2026-11-15", "finnhub"))
+        self.assertEqual(qt.lookup_earnings("AAPL", existing="2026-10-01"), ("2026-10-01", "existing"))
+
+    def test_get_quote_attaches_earnings(self):
+        snap = {"latestTrade": {"p": 10}, "dailyBar": {"o": 9, "h": 11, "l": 8, "c": 10, "v": 1},
+                "prevDailyBar": {"c": 9}}
+        with mock.patch.dict(os.environ, {"ALPACA_API_KEY_ID": "id", "ALPACA_API_SECRET_KEY": "sec",
+                                          "WATCHLIST_PROVIDER": "alpaca"}):
+            with mock.patch.object(qt, "_get", return_value=snap), \
+                 mock.patch.object(qt, "lookup_earnings", return_value=("2026-10-29", "yahoo-calendar")):
+                q = qt.get_quote("AAPL", provider="alpaca")
+        self.assertEqual(q["price"], 10)
+        self.assertEqual(q["earnings_date"], "2026-10-29")
+        self.assertEqual(q["earnings_source"], "yahoo-calendar")
+
+    def test_alpaca_bars_history(self):
+        snap = {"latestTrade": {"p": 10}, "dailyBar": {"o": 9, "h": 11, "l": 8, "c": 10, "v": 100},
+                "prevDailyBar": {"c": 9}}
+        bars = {"bars": [{"c": 8, "v": 10}, {"c": 9, "v": 20}, {"c": 10, "v": 30}]}
+        with mock.patch.dict(os.environ, {"ALPACA_API_KEY_ID": "id", "ALPACA_API_SECRET_KEY": "sec"}):
+            with mock.patch.object(qt, "_get", side_effect=[snap, bars]):
+                q = qt.from_alpaca("AAPL")
+        self.assertEqual(q["closes"], [8.0, 9.0, 10.0])
+        self.assertEqual(q["source"], "alpaca")
+        self.assertAlmostEqual(q["avg_volume_20d"], 15.0)
+
+    def test_quote_error_hint(self):
+        err = qt.QuoteError("alpaca", "nope", status=401, hint="check alpaca API credentials")
+        self.assertIn("HTTP 401", str(err))
+        self.assertIn("check alpaca", str(err))
+
+    def test_http_retries_on_429(self):
+        class FakeResp:
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def read(self): return b'{"ok":1}'
+        hdr = mock.MagicMock()
+        hdr.get.return_value = "0"
+        err = urllib.error.HTTPError("https://x", 429, "rate", hdr, io.BytesIO(b"slow"))
+        with mock.patch.object(qt, "_sleep"), \
+             mock.patch("urllib.request.urlopen", side_effect=[err, FakeResp()]):
+            self.assertEqual(qt._get("https://example.test", provider="yahoo", retries=2), {"ok": 1})
+
+    def test_auto_order_prefers_alpaca_when_keyed(self):
+        with mock.patch.dict(os.environ, {"ALPACA_API_KEY_ID": "id", "ALPACA_API_SECRET_KEY": "sec"}):
+            self.assertEqual(qt.auto_order()[0], "alpaca")
+
+    def test_quote_age(self):
+        now = dt.datetime(2026, 10, 15, 14, 0, tzinfo=dt.timezone.utc)
+        q = {"as_of": "2026-10-15T13:50:00+00:00"}
+        self.assertAlmostEqual(qt.quote_age_seconds(q, now), 600)
+        self.assertIsNone(qt.quote_age_seconds({}, now))
+
+    def test_alphavantage_clear_error(self):
+        with mock.patch.dict(os.environ, {"ALPHAVANTAGE_API_KEY": "k"}):
+            with mock.patch.object(qt, "_get", return_value={"Note": "API call frequency"}):
+                with self.assertRaises(qt.QuoteError) as ctx:
+                    qt.from_alphavantage("AAPL")
+        self.assertIn("frequency", str(ctx.exception).lower())
 
 
 if __name__ == "__main__":
     unittest.main()
+

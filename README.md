@@ -165,7 +165,7 @@ CRON_TZ=America/New_York
 10 16 * * 1-5      cd ~/us-watchlist-alerts && python3 scripts/brief.py --kind close
 ```
 
-`alerts.py` skips holidays, weekends, and `settings.extra_closures` / `NYSE_EXTRA_CLOSURES` by itself.
+`alerts.py` skips weekends, regular NYSE holidays, dates in [`data/holidays_overrides.json`](data/holidays_overrides.json), `settings.extra_closures` / `NYSE_EXTRA_CLOSURES`, and (when Alpaca keys are set) weekdays missing from Alpaca's official calendar.
 
 ## Configuration
 
@@ -173,24 +173,29 @@ CRON_TZ=America/New_York
 |---|---|
 | `WATCHLIST_FILE` | Watchlist path (default `./watchlist.json`) |
 | `ALERT_STATE_FILE` | Cooldown state (default `./.alert_state.json`) |
-| `WATCHLIST_PROVIDER` | `auto` (default), `yfinance`, `yahoo`, `alpaca`, `finnhub`, `alphavantage` |
+| `WATCHLIST_PROVIDER` | `auto` (default), `alpaca`, `yfinance`, `yahoo`, `finnhub`, `alphavantage` |
+| `WATCHLIST_STALE_AFTER` | Seconds before a regular-session quote is flagged stale (default `900`; `0`=off) |
+| `WATCHLIST_HTTP_TIMEOUT` | HTTP timeout seconds (default `15`) |
 | `NYSE_EXTRA_CLOSURES` | Comma-separated ISO dates for unscheduled full-day closures |
-| `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` | Optional Alpaca snapshot |
-| `FINNHUB_API_KEY` | Optional Finnhub quotes |
-| `ALPHAVANTAGE_API_KEY` | Optional Alpha Vantage daily history |
+| `ALPACA_API_KEY_ID` / `ALPACA_API_SECRET_KEY` | Official Alpaca snapshot + daily bars + trading calendar |
+| `ALPACA_API_BASE` | Trading API host for the calendar (default `https://paper-api.alpaca.markets`) |
+| `FINNHUB_API_KEY` | Optional Finnhub quotes, candles, and earnings calendar |
+| `ALPHAVANTAGE_API_KEY` | Optional Alpha Vantage daily history and earnings calendar |
 
-Watchlist `settings`: `cooldown_minutes`, `rearm_pct`, `sessions` (`regular`/`pre`/`after`), `volume_spike_multiple`, `near_52w_pct`, `earnings_days`, `max_alerts_per_run`, `extra_closures`.
+Watchlist `settings`: `cooldown_minutes`, `rearm_pct`, `sessions` (`regular`/`pre`/`after`), `volume_spike_multiple`, `near_52w_pct`, `earnings_days`, `max_alerts_per_run`, `extra_closures`, `stale_after_seconds`.
 
 ## Quote fallback order
 
 For `provider=auto`, first success wins:
 
 1. `--fixture` (tests and the demo GIF)
-2. **yfinance** if installed — history **and** earnings dates
-3. **Yahoo** public chart API (`query1`, then `query2`) — unofficial, stdlib, best-effort
-4. **Alpaca** snapshot if both API keys are set (no history → no MA/RSI/52w/earnings rules)
-5. **Finnhub** if `FINNHUB_API_KEY` is set (same history limitation)
-6. **Alpha Vantage** daily if `ALPHAVANTAGE_API_KEY` is set (history, no earnings date)
+2. **Alpaca** snapshot + daily bars if both API keys are set (official US feed; history included)
+3. **yfinance** if installed
+4. **Yahoo** public chart API (`query1`, then `query2`) — unofficial, stdlib, best-effort
+5. **Finnhub** quote + candles if `FINNHUB_API_KEY` is set
+6. **Alpha Vantage** daily if `ALPHAVANTAGE_API_KEY` is set
+
+Earnings dates are filled **separately** (Yahoo `calendarEvents`, then Finnhub, then Alpha Vantage) so `earnings_within` works without yfinance. HTTP calls retry 429/5xx; failures are `QuoteError`s with a provider and hint.
 
 Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
@@ -203,13 +208,13 @@ Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 ## Limitations
 
-- **Unscheduled market closures** are not in the rule-based NYSE table. Set `NYSE_EXTRA_CLOSURES` or `settings.extra_closures`.
-- **Earnings dates depend on yfinance.** Other providers leave `earnings_date` empty, so `earnings_within` will not fire.
-- The **Yahoo chart endpoint is unofficial** and best-effort. It can change, rate-limit, or return delayed quotes (~15 minutes).
-- Alpaca/Finnhub snapshots have **no daily history**, so cross/RSI/52-week/volume-average rules will not fire on those quotes.
+- **Unscheduled closures** use a bundled list (`data/holidays_overrides.json`, incomplete), plus env/settings overrides, plus an optional Alpaca official calendar overlay. The rule-based table still does not invent mourning days on its own.
+- **Earnings dates** no longer require yfinance, but Yahoo/Finnhub/AV calendars can be wrong or empty. Confirm against issuer IR.
+- The **Yahoo chart / quoteSummary endpoints are unofficial** and best-effort. They can change, rate-limit, or return delayed quotes (~15 minutes).
+- Alpaca/Finnhub history depends on bars/candles succeeding; if those calls fail, MA/RSI/52-week rules will not fire even though the last price is present.
 - US-listed equities and ETFs only. No order routing.
 
-Full write-up: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
+Full write-up: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Changelog: [CHANGELOG.md](CHANGELOG.md).
 
 ## Comparison
 
@@ -219,7 +224,7 @@ This repo is a **watchlist heartbeat**: schema + NYSE session gate + anti-spam a
 |---|---|---|---|---|---|
 | Job | Watchlist, price alerts, morning/close brief | ~70 research, screening, journal, backtest skills | ~25 analysis skills (valuation, earnings, social, yfinance) | Per-source data skills **and broker execution** | Monitor daemon with 7 alert rules |
 | Markets | US listed stocks/ETFs | Mostly US research | Global analysis | US + Argentina + global data | **China A-shares**, futures, gold |
-| Default data | Stdlib Yahoo chart; optional yfinance / keys | Many screeners want FMP or FinViz Elite | yfinance + various APIs | One skill per vendor; keys vary | A-share feeds |
+| Default data | Stdlib Yahoo chart; Alpaca official if keyed; optional yfinance / Finnhub / AV | Many screeners want FMP or FinViz Elite | yfinance + various APIs | One skill per vendor; keys vary | A-share feeds |
 | Auto-trade | **Never** (hard rule in every skill) | Research / discipline, not a 15-min alerter | Analysis, not latching alerts | **Places Alpaca orders** | Alerts only |
 | Session logic | NYSE hours, early closes, holidays, extra closures | Not this repo's job | Not this repo's job | Alpaca calendar inside the trading skill | Beijing time, A-share sessions |
 | Anti-spam | Latch + rearm + once-per-day + cooldown | n/a | n/a | n/a | Severity tiers + polling |
@@ -238,7 +243,7 @@ No network, no extra pip packages. GitHub Actions runs that command on Python 3.
 ## Contributing and growth
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) — tests, PR bar, good first issues
-- [GROWTH_PLAN.md](GROWTH_PLAN.md) — marketplaces, awesome-lists, launch posts, v0.2 / v0.3
+- [GROWTH_PLAN.md](GROWTH_PLAN.md) — marketplaces, awesome-lists, launch posts, v0.3
 - [docs/LIMITATIONS.md](docs/LIMITATIONS.md)
 
 MIT © 2026 Eli Alvarado

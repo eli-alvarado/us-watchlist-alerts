@@ -4,6 +4,7 @@ settings:
   cooldown_minutes: 240
   sessions: [regular]
   extra_closures: []   # ISO dates for unscheduled full-day closures
+  stale_after_seconds: 900
 tickers:
   - symbol: MSFT
     side: long

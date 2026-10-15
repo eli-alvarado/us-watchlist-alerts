@@ -3,50 +3,146 @@
 Fallback order for ``provider=auto`` (first success wins):
 
 1. ``--fixture`` / ``fixture=`` path, if given (tests and demos; not a live feed)
-2. ``yfinance`` if the package is importable — daily history **and** earnings dates
-3. Yahoo public chart API (stdlib, unofficial, best-effort) — ``query1`` then ``query2``
-4. Alpaca snapshot, if ``ALPACA_API_KEY_ID`` + ``ALPACA_API_SECRET_KEY`` are set
-   (latest trade / daily bar; **no** history, so MA / RSI / 52-week / earnings alerts
-   will not fire)
-5. Finnhub quote, if ``FINNHUB_API_KEY`` is set (same history limitation as Alpaca)
-6. Alpha Vantage daily, if ``ALPHAVANTAGE_API_KEY`` is set (history, no earnings date)
+2. Alpaca snapshot + daily bars, if ``ALPACA_API_KEY_ID`` + ``ALPACA_API_SECRET_KEY``
+   (official US feed; history included when bars succeed)
+3. ``yfinance`` if the package is importable
+4. Yahoo public chart API (stdlib, unofficial, best-effort) — ``query1`` then ``query2``
+5. Finnhub quote + candles, if ``FINNHUB_API_KEY`` is set
+6. Alpha Vantage daily, if ``ALPHAVANTAGE_API_KEY`` is set
 
-Force one provider with ``--provider`` / ``WATCHLIST_PROVIDER``. Earnings dates are
-only populated by yfinance today; other providers leave ``earnings_date`` as null.
+Earnings dates are filled independently of the quote provider (first hit):
 
-Normalized quote dict:
-  symbol, price, prev_close, open, day_high, day_low, volume, avg_volume_20d,
-  high_52w, low_52w, closes (list, oldest->newest, daily), earnings_date (ISO or None),
-  source, as_of (ISO UTC)
+1. Already on the quote (yfinance, or a fixture)
+2. Yahoo ``quoteSummary`` ``calendarEvents`` (stdlib, unofficial)
+3. Finnhub earnings calendar, if ``FINNHUB_API_KEY`` is set
+4. Alpha Vantage ``EARNINGS_CALENDAR``, if ``ALPHAVANTAGE_API_KEY`` is set
+
+Normalized quote dict: see ``QUOTE_FIELDS``.
 
 CLI: python scripts/quotes.py AAPL MSFT [--fixture tests/fixtures/quotes.json] [--provider yahoo]
 """
 from __future__ import annotations
-import argparse, datetime as dt, json, os, sys, urllib.error, urllib.parse, urllib.request
+import argparse, datetime as dt, json, os, sys, time, urllib.error, urllib.parse, urllib.request
 
 UA = {
-    "User-Agent": "us-watchlist-alerts/0.1 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
+    "User-Agent": "us-watchlist-alerts/0.2 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
 }
 YAHOO_HOSTS = ("query1.finance.yahoo.com", "query2.finance.yahoo.com")
+QUOTE_FIELDS = (
+    "symbol", "price", "prev_close", "open", "day_high", "day_low", "volume",
+    "avg_volume_20d", "high_52w", "low_52w", "closes", "earnings_date",
+    "earnings_source", "source", "as_of",
+)
 
 
-def _get(url, headers=None, timeout=15, retries=1):
+class QuoteError(RuntimeError):
+    """Provider-tagged failure with optional HTTP status and a next-step hint."""
+
+    def __init__(self, provider, message, status=None, hint=None):
+        self.provider = provider
+        self.status = status
+        self.hint = hint
+        parts = [f"{provider}: {message}"]
+        if status is not None:
+            parts.append(f"HTTP {status}")
+        if hint:
+            parts.append(hint)
+        super().__init__(" — ".join(parts))
+
+
+def _timeout():
+    try:
+        return float(os.environ.get("WATCHLIST_HTTP_TIMEOUT") or 15)
+    except ValueError:
+        return 15.0
+
+
+def _sleep(seconds):
+    time.sleep(seconds)
+
+
+def _get(url, headers=None, timeout=None, retries=2, provider="http", raw=False):
+    """GET JSON (or raw bytes if ``raw``). Retries 429/5xx with exponential backoff."""
     last = None
     hdrs = {**UA, **(headers or {})}
+    timeout = _timeout() if timeout is None else timeout
     for attempt in range(retries + 1):
         try:
             req = urllib.request.Request(url, headers=hdrs)
             with urllib.request.urlopen(req, timeout=timeout) as r:
-                return json.loads(r.read().decode())
-        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as e:
-            last = e
-            if attempt >= retries:
-                break
+                body = r.read()
+            if raw:
+                return body
+            try:
+                return json.loads(body.decode())
+            except json.JSONDecodeError as e:
+                raise QuoteError(provider, f"invalid JSON: {e}", hint=url.split("?", 1)[0])
+        except urllib.error.HTTPError as e:
+            status = e.code
+            try:
+                err_body = e.read().decode()[:240]
+            except Exception:
+                err_body = ""
+            retry_after = e.headers.get("Retry-After") if e.headers else None
+            try:
+                e.close()
+            except Exception:
+                pass
+            last = QuoteError(provider, err_body or e.reason or "request failed", status=status,
+                              hint=_hint_for_status(status, provider))
+            if status in (429, 500, 502, 503, 504) and attempt < retries:
+                delay = min(2 ** attempt, 8)
+                try:
+                    if retry_after:
+                        delay = max(delay, min(float(retry_after), 30))
+                except ValueError:
+                    pass
+                _sleep(delay)
+                continue
+            raise last
+        except (urllib.error.URLError, TimeoutError, OSError) as e:
+            last = QuoteError(provider, str(e) or e.__class__.__name__,
+                              hint="network/timeout; raise WATCHLIST_HTTP_TIMEOUT or try another provider")
+            if attempt < retries:
+                _sleep(min(2 ** attempt, 8))
+                continue
+            raise last
     raise last
+
+
+def _hint_for_status(status, provider):
+    if status == 401:
+        return f"check {provider} API credentials"
+    if status == 403:
+        return f"{provider} refused the request (plan/feed permissions?)"
+    if status == 404:
+        return "unknown symbol or endpoint"
+    if status == 429:
+        return "rate limited; wait, or set WATCHLIST_PROVIDER to another source"
+    if status and status >= 500:
+        return f"{provider} is down; auto fallback will try the next source"
+    return None
 
 
 def _now():
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+
+
+def quote_age_seconds(q, now=None):
+    """Age of ``as_of`` in seconds, or None if missing/unparseable."""
+    raw = (q or {}).get("as_of")
+    if not raw:
+        return None
+    try:
+        t = dt.datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=dt.timezone.utc)
+    now = now or dt.datetime.now(dt.timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=dt.timezone.utc)
+    return (now.astimezone(dt.timezone.utc) - t.astimezone(dt.timezone.utc)).total_seconds()
 
 
 def _finish(q):
@@ -61,9 +157,10 @@ def _finish(q):
         if q.get("high_52w") is None: q["high_52w"] = max(yr)
         if q.get("low_52w") is None: q["low_52w"] = min(yr)
     q.setdefault("earnings_date", None)
+    q.setdefault("earnings_source", None)
     q.setdefault("as_of", _now())
     if q.get("price") is None:
-        raise RuntimeError(f"quote for {q.get('symbol')} has no price (source={q.get('source')})")
+        raise QuoteError(q.get("source") or "quote", f"{q.get('symbol')} has no price")
     return q
 
 
@@ -72,7 +169,7 @@ def from_fixture(symbol, path):
         data = json.load(f)
     key = symbol.upper()
     if key not in data:
-        raise KeyError(f"{key} not in fixture {path}")
+        raise QuoteError("fixture", f"{key} not in fixture {path}")
     q = dict(data[key]); q["symbol"] = key; q.setdefault("source", "fixture")
     return _finish(q)
 
@@ -102,16 +199,17 @@ def from_yahoo(symbol):
     for host in YAHOO_HOSTS:
         url = f"https://{host}/v8/finance/chart/{s}?range=1y&interval=1d&includePrePost=false"
         try:
-            d = _get(url)
+            d = _get(url, provider="yahoo")
             break
         except Exception as e:
             errors.append(f"{host}: {e}")
     if d is None:
-        raise RuntimeError("yahoo chart failed: " + "; ".join(errors))
+        raise QuoteError("yahoo", "chart failed: " + "; ".join(errors),
+                         hint="unofficial endpoint; install yfinance or set Alpaca/Finnhub keys")
     results = (d.get("chart") or {}).get("result") or []
     if not results:
         err = ((d.get("chart") or {}).get("error") or {}).get("description") or "no result"
-        raise RuntimeError(f"yahoo chart: {err}")
+        raise QuoteError("yahoo", f"chart: {err}", hint="unknown symbol, or Yahoo is blocking this UA")
     r = results[0]
     m = r.get("meta") or {}
     ind = (r.get("indicators") or {}).get("quote") or [{}]
@@ -150,6 +248,15 @@ def _first_iso_date(raw):
         return raw.date().isoformat()
     if isinstance(raw, dt.date):
         return raw.isoformat()
+    if isinstance(raw, dict):
+        if raw.get("fmt"):
+            return _first_iso_date(raw["fmt"])
+        if raw.get("raw") is not None:
+            try:
+                return dt.datetime.fromtimestamp(int(raw["raw"]), dt.timezone.utc).date().isoformat()
+            except (TypeError, ValueError, OSError):
+                pass
+        return _first_iso_date(raw.get("date") or raw.get("earningsDate"))
     if hasattr(raw, "date") and callable(raw.date):
         try:
             return raw.date().isoformat()
@@ -214,7 +321,7 @@ def from_yfinance(symbol):
     t = yf.Ticker(symbol)
     h = t.history(period="1y", interval="1d")
     if h is None or getattr(h, "empty", False):
-        raise RuntimeError(f"yfinance returned no history for {symbol}")
+        raise QuoteError("yfinance", f"no history for {symbol}")
     closes = [float(x) for x in h["Close"].tolist()]
     vols = [float(x) for x in h["Volume"].tolist()]
     fi = t.fast_info
@@ -230,22 +337,57 @@ def from_yfinance(symbol):
          "open": float(h["Open"].iloc[-1]), "day_high": float(h["High"].iloc[-1]),
          "day_low": float(h["Low"].iloc[-1]), "volume": vols[-1] if vols else None,
          "closes": closes, "_volumes": vols,
-         "earnings_date": _yfinance_earnings_date(t), "source": "yfinance"}
+         "earnings_date": _yfinance_earnings_date(t), "earnings_source": "yfinance",
+         "source": "yfinance"}
+    if not q["earnings_date"]:
+        q["earnings_source"] = None
     return _finish(q)
 
 
+def _finnhub_key():
+    k = os.environ.get("FINNHUB_API_KEY")
+    if not k:
+        raise QuoteError("finnhub", "FINNHUB_API_KEY is not set")
+    return k
+
+
 def from_finnhub(symbol):
-    k = os.environ["FINNHUB_API_KEY"]
-    d = _get(f"https://finnhub.io/api/v1/quote?symbol={symbol.upper()}&token={k}")
-    q = {"symbol": symbol.upper(), "price": d["c"], "prev_close": d["pc"], "open": d["o"],
-         "day_high": d["h"], "day_low": d["l"], "closes": [], "source": "finnhub"}
+    k = _finnhub_key()
+    d = _get(f"https://finnhub.io/api/v1/quote?symbol={symbol.upper()}&token={k}", provider="finnhub")
+    if d.get("c") is None:
+        raise QuoteError("finnhub", f"empty quote for {symbol}", hint="unknown symbol or key plan")
+    closes, vols = [], []
+    try:
+        now = int(dt.datetime.now(dt.timezone.utc).timestamp())
+        start = now - 400 * 86400
+        c = _get(
+            f"https://finnhub.io/api/v1/stock/candle?symbol={symbol.upper()}&resolution=D&from={start}&to={now}&token={k}",
+            provider="finnhub",
+        )
+        if c.get("s") == "ok":
+            closes = [float(x) for x in (c.get("c") or [])]
+            vols = [float(x) for x in (c.get("v") or [])]
+    except Exception:
+        pass
+    q = {"symbol": symbol.upper(), "price": d["c"], "prev_close": d.get("pc"), "open": d.get("o"),
+         "day_high": d.get("h"), "day_low": d.get("l"), "closes": closes, "_volumes": vols,
+         "source": "finnhub"}
     return _finish(q)
 
 
 def from_alphavantage(symbol):
-    k = os.environ["ALPHAVANTAGE_API_KEY"]
-    d = _get(f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&outputsize=full&symbol={symbol.upper()}&apikey={k}")
-    ts = d["Time Series (Daily)"]; days = sorted(ts)[-260:]
+    k = os.environ.get("ALPHAVANTAGE_API_KEY")
+    if not k:
+        raise QuoteError("alphavantage", "ALPHAVANTAGE_API_KEY is not set")
+    d = _get(
+        f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&outputsize=full&symbol={symbol.upper()}&apikey={k}",
+        provider="alphavantage",
+    )
+    ts = d.get("Time Series (Daily)")
+    if not ts:
+        msg = d.get("Note") or d.get("Information") or d.get("Error Message") or "no time series"
+        raise QuoteError("alphavantage", msg, hint="daily cap or invalid symbol")
+    days = sorted(ts)[-260:]
     closes = [float(ts[x]["4. close"]) for x in days]; vols = [float(ts[x]["5. volume"]) for x in days]
     last = ts[days[-1]]
     q = {"symbol": symbol.upper(), "price": closes[-1], "prev_close": closes[-2], "open": float(last["1. open"]),
@@ -254,13 +396,157 @@ def from_alphavantage(symbol):
     return _finish(q)
 
 
+def _alpaca_headers():
+    kid, sec = os.environ.get("ALPACA_API_KEY_ID"), os.environ.get("ALPACA_API_SECRET_KEY")
+    if not (kid and sec):
+        raise QuoteError("alpaca", "ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY are not set")
+    return {"APCA-API-KEY-ID": kid, "APCA-API-SECRET-KEY": sec}
+
+
+def alpaca_calendar(year):
+    """Official trading-day list from Alpaca Trading API (paper host by default)."""
+    h = _alpaca_headers()
+    import market_calendar as mc
+    url = mc.alpaca_calendar_url(year)
+    rows = _get(url, headers=h, provider="alpaca")
+    if not isinstance(rows, list):
+        raise QuoteError("alpaca", "calendar response was not a list")
+    return rows
+
+
 def from_alpaca(symbol):
-    h = {"APCA-API-KEY-ID": os.environ["ALPACA_API_KEY_ID"], "APCA-API-SECRET-KEY": os.environ["ALPACA_API_SECRET_KEY"]}
-    d = _get(f"https://data.alpaca.markets/v2/stocks/{symbol.upper()}/snapshot", headers=h)
-    q = {"symbol": symbol.upper(), "price": d["latestTrade"]["p"], "prev_close": d["prevDailyBar"]["c"],
-         "open": d["dailyBar"]["o"], "day_high": d["dailyBar"]["h"], "day_low": d["dailyBar"]["l"],
-         "volume": d["dailyBar"]["v"], "closes": [], "source": "alpaca"}
+    h = _alpaca_headers()
+    d = _get(f"https://data.alpaca.markets/v2/stocks/{symbol.upper()}/snapshot", headers=h, provider="alpaca")
+    trade = d.get("latestTrade") or {}
+    daily = d.get("dailyBar") or {}
+    prev = d.get("prevDailyBar") or {}
+    price = trade.get("p")
+    if price is None:
+        price = (daily or {}).get("c")
+    if price is None:
+        raise QuoteError("alpaca", f"snapshot missing last price for {symbol}",
+                         hint="symbol not on the US Alpaca feed, or market not yet open")
+    closes, vols = [], []
+    try:
+        end = dt.date.today()
+        start = end - dt.timedelta(days=420)
+        bars = _get(
+            f"https://data.alpaca.markets/v2/stocks/{symbol.upper()}/bars"
+            f"?timeframe=1Day&start={start.isoformat()}&end={end.isoformat()}&limit=10000&adjustment=split",
+            headers=h, provider="alpaca",
+        )
+        rows = bars.get("bars") or []
+        closes = [float(b["c"]) for b in rows if b.get("c") is not None]
+        vols = [float(b.get("v") or 0) for b in rows if b.get("c") is not None]
+    except Exception:
+        pass
+    q = {"symbol": symbol.upper(), "price": price, "prev_close": prev.get("c"),
+         "open": daily.get("o"), "day_high": daily.get("h"), "day_low": daily.get("l"),
+         "volume": daily.get("v"), "closes": closes, "_volumes": vols, "source": "alpaca"}
     return _finish(q)
+
+
+def earnings_from_yahoo(symbol, as_of_date=None):
+    s = urllib.parse.quote(symbol.upper())
+    errors = []
+    d = None
+    for host in YAHOO_HOSTS:
+        url = f"https://{host}/v10/finance/quoteSummary/{s}?modules=calendarEvents"
+        try:
+            d = _get(url, provider="yahoo-earnings")
+            break
+        except Exception as e:
+            errors.append(str(e))
+    if d is None:
+        raise QuoteError("yahoo-earnings", "; ".join(errors) or "no response")
+    result = ((d.get("quoteSummary") or {}).get("result") or [{}])[0]
+    earnings = ((result.get("calendarEvents") or {}).get("earnings") or {})
+    dates = earnings.get("earningsDate") or earnings.get("earningsDateStart") or []
+    today = as_of_date or dt.date.today()
+    parsed = []
+    for item in dates if isinstance(dates, list) else [dates]:
+        iso = _first_iso_date(item)
+        if iso:
+            parsed.append(dt.date.fromisoformat(iso))
+    future = [x for x in parsed if x >= today]
+    pick = min(future) if future else (max(parsed) if parsed else None)
+    return pick.isoformat() if pick else None
+
+
+def earnings_from_finnhub(symbol, as_of_date=None):
+    k = _finnhub_key()
+    today = as_of_date or dt.date.today()
+    start = today - dt.timedelta(days=5)
+    end = today + dt.timedelta(days=120)
+    d = _get(
+        f"https://finnhub.io/api/v1/calendar/earnings?from={start.isoformat()}&to={end.isoformat()}"
+        f"&symbol={symbol.upper()}&token={k}",
+        provider="finnhub",
+    )
+    rows = d.get("earningsCalendar") or d.get("earnings") or []
+    future = []
+    for row in rows:
+        iso = _first_iso_date((row or {}).get("date") or (row or {}).get("reportDate"))
+        if not iso:
+            continue
+        day = dt.date.fromisoformat(iso)
+        if day >= today:
+            future.append(day)
+    return min(future).isoformat() if future else None
+
+
+def earnings_from_alphavantage(symbol, as_of_date=None):
+    k = os.environ.get("ALPHAVANTAGE_API_KEY")
+    if not k:
+        raise QuoteError("alphavantage", "ALPHAVANTAGE_API_KEY is not set")
+    body = _get(
+        f"https://www.alphavantage.co/query?function=EARNINGS_CALENDAR&symbol={symbol.upper()}&horizon=3month&apikey={k}",
+        provider="alphavantage", raw=True,
+    )
+    text = body.decode() if isinstance(body, (bytes, bytearray)) else str(body)
+    if text.lstrip().startswith("{"):
+        d = json.loads(text)
+        msg = d.get("Note") or d.get("Information") or d.get("Error Message") or "unexpected JSON"
+        raise QuoteError("alphavantage", msg, hint="daily cap or invalid key")
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if len(lines) < 2:
+        return None
+    header = [c.strip() for c in lines[0].split(",")]
+    try:
+        idx = header.index("reportDate")
+    except ValueError:
+        idx = 2 if len(header) > 2 else 0
+    today = as_of_date or dt.date.today()
+    future = []
+    for ln in lines[1:]:
+        cols = [c.strip() for c in ln.split(",")]
+        if idx >= len(cols):
+            continue
+        iso = _first_iso_date(cols[idx])
+        if iso:
+            day = dt.date.fromisoformat(iso)
+            if day >= today:
+                future.append(day)
+    return min(future).isoformat() if future else None
+
+
+def lookup_earnings(symbol, existing=None, as_of_date=None):
+    """Return (iso_date, source) using the first source that yields a date."""
+    if existing:
+        return existing, "existing"
+    steps = [("yahoo-calendar", earnings_from_yahoo)]
+    if os.environ.get("FINNHUB_API_KEY"):
+        steps.append(("finnhub", earnings_from_finnhub))
+    if os.environ.get("ALPHAVANTAGE_API_KEY"):
+        steps.append(("alphavantage", earnings_from_alphavantage))
+    for name, fn in steps:
+        try:
+            ed = fn(symbol, as_of_date=as_of_date)
+            if ed:
+                return ed, name
+        except Exception:
+            continue
+    return None, None
 
 
 PROVIDERS = {"yfinance": from_yfinance, "yahoo": from_yahoo, "finnhub": from_finnhub,
@@ -269,34 +555,45 @@ PROVIDERS = {"yfinance": from_yfinance, "yahoo": from_yahoo, "finnhub": from_fin
 
 def auto_order():
     order = []
+    if os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY"):
+        order.append("alpaca")
     try:
         import yfinance  # noqa: F401
         order.append("yfinance")
     except ImportError:
         pass
     order.append("yahoo")
-    if os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY"):
-        order.append("alpaca")
     if os.environ.get("FINNHUB_API_KEY"): order.append("finnhub")
     if os.environ.get("ALPHAVANTAGE_API_KEY"): order.append("alphavantage")
     return order
 
 
-def get_quote(symbol, provider="auto", fixture=None):
+def get_quote(symbol, provider="auto", fixture=None, fetch_earnings=True):
     if fixture:
         return from_fixture(symbol, fixture)
     errors = []
     wanted = [provider] if provider != "auto" else auto_order()
+    q = None
     for p in wanted:
         fn = PROVIDERS.get(p)
         if fn is None:
             errors.append(f"{p}: unknown provider")
             continue
         try:
-            return fn(symbol)
-        except Exception as e:  # try next provider
-            errors.append(f"{p}: {e}")
-    raise RuntimeError(f"all providers failed for {symbol}: " + "; ".join(errors))
+            q = fn(symbol)
+            break
+        except Exception as e:
+            errors.append(str(e) if str(e).startswith(f"{p}:") else f"{p}: {e}")
+    if q is None:
+        raise QuoteError("auto" if provider == "auto" else provider,
+                         f"all providers failed for {symbol}: " + "; ".join(errors),
+                         hint="set ALPACA_* keys for the official feed, or WATCHLIST_PROVIDER=yahoo")
+    if fetch_earnings and not q.get("earnings_date"):
+        ed, src = lookup_earnings(symbol)
+        if ed:
+            q["earnings_date"] = ed
+            q["earnings_source"] = src
+    return q
 
 
 def main(argv=None):
@@ -305,12 +602,20 @@ def main(argv=None):
     ap.add_argument("--provider", default=os.environ.get("WATCHLIST_PROVIDER", "auto"))
     ap.add_argument("--fixture")
     ap.add_argument("--full", action="store_true", help="include closes history")
+    ap.add_argument("--stale-after", type=int, default=int(os.environ.get("WATCHLIST_STALE_AFTER") or 900),
+                    help="warn if as_of is older than N seconds (0=off)")
     a = ap.parse_args(argv)
     out = {}
+    now = dt.datetime.now(dt.timezone.utc)
     for s in a.symbols:
         try:
             q = get_quote(s, a.provider, a.fixture)
             if not a.full: q.pop("closes", None)
+            if a.stale_after:
+                age = quote_age_seconds(q, now)
+                if age is not None and age > a.stale_after:
+                    q["stale"] = True
+                    q["age_seconds"] = int(age)
             out[s.upper()] = q
         except Exception as e:
             out[s.upper()] = {"error": str(e)}

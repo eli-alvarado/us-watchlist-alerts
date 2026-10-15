@@ -36,7 +36,7 @@ Run from the repo root so `scripts/` imports resolve the same way the skills doc
 
 These are sized for a first PR. File one with the [good first issue template](.github/ISSUE_TEMPLATE/good_first_issue.yml) if it is not already open:
 
-- Record a newly announced NYSE unscheduled closure as a documented example in `docs/LIMITATIONS.md` (do not pretend the rule-based calendar knows it automatically).
+- Add a newly announced NYSE unscheduled closure to `data/holidays_overrides.json` with a name and a calendar test (do not pretend the rule-based table invents mourning days).
 - Add a `--format json` snapshot assertion for `brief.py` morning output against the existing fixtures.
 - Teach `from_yfinance` another calendar shape you have actually seen in the wild, with a mock in `tests/test_all.py`.
 - Expand `examples/watchlist.yaml` with a short + `extra_closures` example that still validates.
@@ -44,4 +44,4 @@ These are sized for a first PR. File one with the [good first issue template](.g
 
 ## Releases
 
-Maintainers tag `v0.x.y` on `main` after CI is green. Changelog lives in GitHub release notes until the repo is large enough for `CHANGELOG.md`. See [GROWTH_PLAN.md](GROWTH_PLAN.md).
+Maintainers tag `v0.x.y` on `main` after CI is green and update [CHANGELOG.md](CHANGELOG.md). See [GROWTH_PLAN.md](GROWTH_PLAN.md).

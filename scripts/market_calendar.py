@@ -1,15 +1,24 @@
 """NYSE trading calendar and session helpers (US/Eastern). Stdlib only.
 
-Rule-based holidays and early closes. Unscheduled closures (days of mourning,
-weather, etc.) are **not** in the built-in table — set ``NYSE_EXTRA_CLOSURES``
-(comma-separated ``YYYY-MM-DD``) or ``settings.extra_closures`` on the watchlist.
+Regular holidays and early closes are rule-based. Unscheduled closures come from:
+
+1. ``data/holidays_overrides.json`` (known mourning / weather days; incomplete)
+2. ``NYSE_EXTRA_CLOSURES`` (comma-separated ``YYYY-MM-DD``)
+3. watchlist ``settings.extra_closures``
+4. Optional Alpaca Trading API calendar overlay when API keys are set
+   (official weekdays-with-no-session; see ``refresh_official_calendar``)
 """
 from __future__ import annotations
 import datetime as dt
+import json
 import os
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_OVERRIDE_PATH = os.path.join(_ROOT, "data", "holidays_overrides.json")
+_OFFICIAL_CLOSED: dict[dt.date, str] = {}
+_OVERRIDE_CACHE: dict[dt.date, str] | None = None
 
 
 def _nth_weekday(year, month, weekday, n):
@@ -55,14 +64,34 @@ def parse_dates(values):
     return out
 
 
+def bundled_overrides(path=None):
+    """Named unscheduled closures shipped in data/holidays_overrides.json."""
+    global _OVERRIDE_CACHE
+    if path is None and _OVERRIDE_CACHE is not None:
+        return dict(_OVERRIDE_CACHE)
+    p = path or _OVERRIDE_PATH
+    out: dict[dt.date, str] = {}
+    if os.path.exists(p):
+        with open(p) as f:
+            data = json.load(f)
+        for row in data.get("closures") or []:
+            d = dt.date.fromisoformat(str(row["date"])[:10])
+            out[d] = row.get("name") or "unscheduled closure"
+    if path is None:
+        _OVERRIDE_CACHE = dict(out)
+    return out
+
+
 def extra_closures(extra=None):
-    """Unscheduled full-day closures: env ``NYSE_EXTRA_CLOSURES`` plus ``extra``."""
-    out = parse_dates(extra)
+    """All additive full-day closures: bundled file + env + extra + official overlay."""
+    out = set(bundled_overrides())
+    out |= parse_dates(extra)
     raw = os.environ.get("NYSE_EXTRA_CLOSURES") or ""
     for part in raw.split(","):
         part = part.strip()
         if part:
             out.add(dt.date.fromisoformat(part[:10]))
+    out |= set(_OFFICIAL_CLOSED)
     return out
 
 
@@ -87,7 +116,14 @@ def nyse_holidays(year):
 
 
 def holiday_name(d: dt.date, extra=None) -> str | None:
-    if d in extra_closures(extra):
+    named = bundled_overrides().get(d) or _OFFICIAL_CLOSED.get(d)
+    if named:
+        return named
+    if extra is not None and d in parse_dates(extra):
+        return "unscheduled closure"
+    raw = os.environ.get("NYSE_EXTRA_CLOSURES") or ""
+    env_dates = parse_dates(p.strip() for p in raw.split(",") if p.strip())
+    if d in env_dates:
         return "unscheduled closure"
     return nyse_holidays(d.year).get(d)
 
@@ -135,6 +171,65 @@ def next_trading_day(d: dt.date, extra=None) -> dt.date:
     return d
 
 
+def closures_from_trading_days(year, open_dates):
+    """Weekdays in ``year`` that are missing from an official set of session dates."""
+    open_dates = set(open_dates)
+    closed = {}
+    d = dt.date(year, 1, 1)
+    last = dt.date(year, 12, 31)
+    while d <= last:
+        if d.weekday() < 5 and d not in open_dates:
+            closed[d] = "official calendar (market closed)"
+        d += dt.timedelta(days=1)
+    return closed
+
+
+def set_official_closures(mapping):
+    """Install a date->name map from an official calendar overlay (tests / live fetch)."""
+    _OFFICIAL_CLOSED.clear()
+    for d, name in (mapping or {}).items():
+        if not isinstance(d, dt.date):
+            d = dt.date.fromisoformat(str(d)[:10])
+        _OFFICIAL_CLOSED[d] = name or "official calendar (market closed)"
+    return dict(_OFFICIAL_CLOSED)
+
+
+def clear_official_closures():
+    _OFFICIAL_CLOSED.clear()
+
+
+def alpaca_calendar_url(year):
+    base = (os.environ.get("ALPACA_API_BASE") or "https://paper-api.alpaca.markets").rstrip("/")
+    return f"{base}/v2/calendar?start={year}-01-01&end={year}-12-31"
+
+
+def refresh_official_calendar(year, fetch=None):
+    """Pull Alpaca's trading calendar and treat missing weekdays as closures.
+
+    No-op (returns {}) when keys are missing. ``fetch`` is injected in tests.
+    """
+    if fetch is None and not (os.environ.get("ALPACA_API_KEY_ID") and os.environ.get("ALPACA_API_SECRET_KEY")):
+        return {}
+    if fetch is None:
+        import quotes as qt
+        rows = qt.alpaca_calendar(year)
+    else:
+        rows = fetch(year)
+    open_dates = set()
+    for row in rows or []:
+        raw = row.get("date") if isinstance(row, dict) else row
+        if raw:
+            open_dates.add(dt.date.fromisoformat(str(raw)[:10]))
+    mapping = closures_from_trading_days(year, open_dates)
+    return set_official_closures(mapping)
+
+
 if __name__ == "__main__":
     n = dt.datetime.now(ET)
-    print(f"{n:%Y-%m-%d %H:%M %Z} session={session(n)} trading_day={is_trading_day(n.date())}")
+    try:
+        refresh_official_calendar(n.year)
+    except Exception as e:
+        print(f"official calendar skipped: {e}", flush=True)
+    why = holiday_name(n.date()) or ""
+    extra = f" holiday={why}" if why else ""
+    print(f"{n:%Y-%m-%d %H:%M %Z} session={session(n)} trading_day={is_trading_day(n.date())}{extra}")

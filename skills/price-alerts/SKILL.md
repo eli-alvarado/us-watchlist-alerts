@@ -46,23 +46,25 @@ Any rule may set `cooldown_minutes` to override `settings.cooldown_minutes`.
 
 ## Market hours (America/New_York, handled by `scripts/market_calendar.py`)
 - Pre-market 04:00-09:30, regular 09:30-16:00, after-hours 16:00-20:00 ET; early-close days (day after Thanksgiving, Christmas Eve, July 3 when a weekday) close 13:00 with after-hours to 17:00.
-- NYSE holidays: New Year's (not observed when Saturday), MLK, Presidents', Good Friday, Memorial, Juneteenth, Independence, Labor, Thanksgiving, Christmas (Sat -> Fri, Sun -> Mon). Unscheduled closures (e.g. national days of mourning) are not in the table — set `NYSE_EXTRA_CLOSURES=YYYY-MM-DD,...` or `settings.extra_closures`. Mention it if quotes look stale on a weekday the calendar thinks is open.
+- NYSE holidays: New Year's (not observed when Saturday), MLK, Presidents', Good Friday, Memorial, Juneteenth, Independence, Labor, Thanksgiving, Christmas (Sat -> Fri, Sun -> Mon). Unscheduled closures: bundled `data/holidays_overrides.json`, `NYSE_EXTRA_CLOSURES` / `settings.extra_closures`, and (with Alpaca keys) weekdays missing from the official calendar. Mention it if quotes look stale on a weekday the calendar thinks is open.
 - `settings.sessions` controls when alerts run; default `["regular"]`. Add `"pre"`/`"after"` for extended hours - note extended-hours quotes are thinner and free sources may lag.
 - Always state times in ET (add the user's local time if known, e.g. "10:05 ET / 9:05 CT").
 
 ## Data sources (`scripts/quotes.py`, auto-fallback in this order)
 1. `--fixture` path, if given (tests/demos only).
-2. `yfinance` if installed (`pip install yfinance`) — daily history **and** earnings dates.
-3. Yahoo public chart API (stdlib, unofficial, best-effort): `query1.finance.yahoo.com`, then `query2`.
-4. Alpaca snapshot, if `ALPACA_API_KEY_ID` **and** `ALPACA_API_SECRET_KEY` are set (latest trade; **no** history, so MA / RSI / 52-week / earnings alerts will not fire).
-5. Finnhub quote, if `FINNHUB_API_KEY` is set (same history limitation as Alpaca).
-6. Alpha Vantage daily, if `ALPHAVANTAGE_API_KEY` is set (history, no earnings date).
+2. Alpaca snapshot + daily bars, if `ALPACA_API_KEY_ID` **and** `ALPACA_API_SECRET_KEY` are set (official US feed).
+3. `yfinance` if installed (`pip install yfinance`).
+4. Yahoo public chart API (stdlib, unofficial, best-effort): `query1.finance.yahoo.com`, then `query2`.
+5. Finnhub quote + candles, if `FINNHUB_API_KEY` is set.
+6. Alpha Vantage daily, if `ALPHAVANTAGE_API_KEY` is set.
 
-Force one with `--provider` or `WATCHLIST_PROVIDER`. Free data can be delayed ~15 min; say so when precision matters.
+Force one with `--provider` or `WATCHLIST_PROVIDER`. HTTP 429/5xx are retried; failures are tagged `QuoteError`s (provider, HTTP status, hint). Free data can be delayed ~15 min; say so when precision matters.
 
-**Earnings dates** come from yfinance only. Yahoo / Alpaca / Finnhub / Alpha Vantage leave `earnings_date` null, so `earnings_within` will not fire unless yfinance is installed.
+**Earnings dates** are filled after the quote, first hit: existing field (yfinance/fixture) → Yahoo `calendarEvents` (no key) → Finnhub earnings calendar → Alpha Vantage `EARNINGS_CALENDAR`. `earnings_source` on the quote says which layer won.
 
-**Known limits:** the holiday calendar is rule-based and does not know unscheduled closures (set `NYSE_EXTRA_CLOSURES` or `settings.extra_closures`). The Yahoo endpoint is unofficial and can change or rate-limit. See `docs/LIMITATIONS.md`.
+**Stale quotes:** `--stale-after` / `WATCHLIST_STALE_AFTER` / `settings.stale_after_seconds` (default 900). During the regular session, warn if `as_of` is older than that. `0` disables.
+
+**Known limits:** unscheduled closures live in `data/holidays_overrides.json` (incomplete) plus env/settings plus an optional Alpaca official calendar overlay. Yahoo endpoints are unofficial. See `docs/LIMITATIONS.md`.
 
 **MCP option:** if an `alpaca` MCP server (alpacahq/alpaca-mcp-server) or `tradingview` MCP (atilaahmettaner/tradingview-mcp) is connected, you may use it for quotes/indicators instead of the scripts, then apply the exact same rules and anti-spam logic (read/write `.alert_state.json` in the same format). Use broker MCPs for **read-only** calls only.
 

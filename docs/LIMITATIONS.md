@@ -4,41 +4,70 @@ This project is an **informational** US-listed watchlist and alerter. It is not 
 
 ## Market calendar
 
-The NYSE calendar in `scripts/market_calendar.py` is **rule-based**:
+Regular NYSE holidays and 1:00 PM ET early closes are **rule-based** in `scripts/market_calendar.py` (New Year’s, MLK, Presidents’ Day, Good Friday, Memorial Day, Juneteenth, Independence Day, Labor Day, Thanksgiving, Christmas; New Year’s on Saturday is not observed Friday).
 
-- Full-day holidays (New Year’s, MLK, Presidents’ Day, Good Friday, Memorial Day, Juneteenth, Independence Day, Labor Day, Thanksgiving, Christmas), including the usual Sat→Fri / Sun→Mon observations.
-- New Year’s Day falling on Saturday is **not** observed on the prior Friday (NYSE practice).
-- Early closes (13:00 ET) for the Friday after Thanksgiving, Christmas Eve when it is a weekday, and July 3 when it is Mon–Thu.
+Unscheduled closures (days of mourning, weather, outages) are handled in layers, none of which is a complete live exchange feed:
 
-It does **not** know about unscheduled closures (national days of mourning, weather, technical outages). If quotes look stale on a weekday the calendar thinks is open, treat the session as closed.
+1. **Bundled file** `data/holidays_overrides.json` — known historical special days (e.g. 2025-01-09 Carter mourning, Sandy 2012). Incomplete; PRs welcome when NYSE announces a new one.
+2. **Local overrides** — `NYSE_EXTRA_CLOSURES=YYYY-MM-DD,...` or watchlist `settings.extra_closures`.
+3. **Official overlay (optional)** — with Alpaca keys, each `alerts.py` / `brief.py` run pulls `GET /v2/calendar` and treats weekdays missing from that list as closed. Network failure is ignored and the rule-based + bundled calendar still applies.
 
-**Override:** set `NYSE_EXTRA_CLOSURES=YYYY-MM-DD,YYYY-MM-DD` or `settings.extra_closures` on the watchlist. `alerts.py` will skip those dates unless you pass `--force-session`.
+If quotes look stale on a weekday the calendar thinks is open, treat the session as closed and add the date to `extra_closures`.
 
 ## Earnings dates
 
-`earnings_date` is filled only when the **yfinance** provider succeeds. The Yahoo chart API, Alpaca snapshot, Finnhub quote, and Alpha Vantage daily series do not populate it here. If yfinance is missing or its calendar shape changes, `earnings_within` silently does not fire. Dates can be wrong or delayed; confirm against the issuer’s IR calendar before acting.
+Filled independently of the price provider, first success:
+
+| Order | Source | Needs |
+|------:|--------|-------|
+| 1 | Already on the quote (yfinance / fixture) | — |
+| 2 | Yahoo `quoteSummary` `calendarEvents` | nothing (unofficial) |
+| 3 | Finnhub `/calendar/earnings` | `FINNHUB_API_KEY` |
+| 4 | Alpha Vantage `EARNINGS_CALENDAR` | `ALPHAVANTAGE_API_KEY` |
+
+Dates can be wrong, delayed, or missing. Confirm against the issuer’s IR calendar before acting. `earnings_source` on the quote dict says which layer won.
 
 ## Quote providers
 
 Auto fallback (`WATCHLIST_PROVIDER=auto` / `--provider auto`), first success wins:
 
-| Order | Provider | Needs | History (MA / RSI / 52w) | Earnings |
-|------:|----------|-------|---------------------------|----------|
-| 1 | `--fixture` | path | yes (whatever the file has) | if present |
-| 2 | `yfinance` | `pip install yfinance` | yes | **yes** |
-| 3 | Yahoo public chart | nothing (stdlib) | yes | no |
-| 4 | Alpaca snapshot | `ALPACA_API_KEY_ID` + `ALPACA_API_SECRET_KEY` | **no** | no |
-| 5 | Finnhub | `FINNHUB_API_KEY` | **no** | no |
-| 6 | Alpha Vantage daily | `ALPHAVANTAGE_API_KEY` | yes | no |
+| Order | Provider | Needs | History (MA / RSI / 52w) | Notes |
+|------:|----------|-------|---------------------------|-------|
+| 1 | `--fixture` | path | if present in file | tests/demos |
+| 2 | Alpaca snapshot + daily bars | `ALPACA_API_KEY_ID` + `ALPACA_API_SECRET_KEY` | **yes** when bars succeed | official US feed; tried first when keyed |
+| 3 | `yfinance` | `pip install yfinance` | yes | unofficial Yahoo wrapper |
+| 4 | Yahoo public chart | nothing (stdlib) | yes | unofficial; `query1` then `query2` |
+| 5 | Finnhub quote + candles | `FINNHUB_API_KEY` | **yes** when candles succeed | |
+| 6 | Alpha Vantage daily | `ALPHAVANTAGE_API_KEY` | yes | hard daily cap |
 
-The Yahoo v8 chart hosts (`query1`, then `query2`) are **unofficial**. They can change, rate-limit, or start requiring cookies. Free Yahoo / yfinance quotes may be delayed ~15 minutes. Alpaca and Finnhub quotes without daily history will not trigger golden/death cross, RSI, volume-average, or 52-week rules.
+Yahoo hosts are unofficial and can change, rate-limit, or require cookies. Free Yahoo / yfinance quotes may be delayed ~15 minutes. HTTP calls retry 429/5xx; failures raise `QuoteError` with provider, status, and a hint.
 
 `--provider` / `WATCHLIST_PROVIDER` pins a single provider and does not fall through.
+
+## Quote dict fields
+
+| Field | Meaning |
+|---|---|
+| `symbol` | Uppercase ticker |
+| `price` | Last / regular-session price used by alerts |
+| `prev_close` | Prior session close |
+| `open` | Session open (gap alerts) |
+| `day_high` / `day_low` | Session range |
+| `volume` | Session volume |
+| `avg_volume_20d` | Mean of prior ~20 daily volumes |
+| `high_52w` / `low_52w` | 52-week extremes |
+| `closes` | Daily closes, oldest → newest (omitted from CLI unless `--full`) |
+| `earnings_date` | ISO date or `null` |
+| `earnings_source` | `yfinance`, `yahoo-calendar`, `finnhub`, `alphavantage`, or `null` |
+| `source` | Winning quote provider (`alpaca`, `yahoo-chart`, …) |
+| `as_of` | UTC timestamp when the quote was assembled |
+
+`--stale-after` (default 900s, env `WATCHLIST_STALE_AFTER`, setting `stale_after_seconds`) warns during the **regular** session when `as_of` is older than that. `0` disables.
 
 ## What this does not do
 
 - Non-US listings, FX, crypto, futures, or options chains.
-- Intraday bars, Level 2, or guaranteed real-time data.
+- Intraday bars, Level 2, or guaranteed real-time data on the free path.
 - Portfolio accounting, tax lots, or broker positions (the watchlist is a thesis/stop/target file, not a broker sync).
 - News, filings, or fundamentals (use a research skillset for that).
 - Automatic order routing.

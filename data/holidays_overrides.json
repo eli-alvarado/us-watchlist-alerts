@@ -1,0 +1,15 @@
+{
+  "comment": "Known NYSE full-day closures that are NOT regular holidays (days of mourning, weather, etc.). Incomplete on purpose — add new dates via NYSE_EXTRA_CLOSURES, settings.extra_closures, or (with Alpaca keys) the official calendar overlay. Do not treat this file as a complete exchange feed.",
+  "closures": [
+    {"date": "2025-01-09", "name": "National Day of Mourning (Jimmy Carter)"},
+    {"date": "2018-12-05", "name": "National Day of Mourning (George H.W. Bush)"},
+    {"date": "2012-10-30", "name": "Hurricane Sandy"},
+    {"date": "2012-10-29", "name": "Hurricane Sandy"},
+    {"date": "2007-01-02", "name": "National Day of Mourning (Gerald Ford)"},
+    {"date": "2004-06-11", "name": "National Day of Mourning (Ronald Reagan)"},
+    {"date": "2001-09-14", "name": "September 11"},
+    {"date": "2001-09-13", "name": "September 11"},
+    {"date": "2001-09-12", "name": "September 11"},
+    {"date": "2001-09-11", "name": "September 11"}
+  ]
+}

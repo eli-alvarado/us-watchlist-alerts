@@ -51,33 +51,36 @@ Keep each post to: what it does, what it refuses to do, fixture demo GIF, instal
 - **X** — short demo GIF thread; tag agent-skills / Claude Code / Gemini CLI, not ticker hype.
 - **HN "Ask"** only if there is a real question (how should agents handle broker confirmation?). Prefer Show HN.
 
-Time the post after a **GitHub release** (`v0.1.0`) so the README badge and tag exist.
+Time the post after a **GitHub release** (`v0.2.0`) so the README badge and tag exist.
 
 ## Credibility work
 
 - [x] CI on Python 3.10–3.13 (`python3 -m unittest discover -s tests`)
 - [x] CONTRIBUTING.md, issue templates, limitations doc
-- [ ] **GitHub release v0.1.0** once this lands on `main`
+- [x] CHANGELOG.md (starts at 0.1.0 / 0.2.0)
+- [ ] **GitHub release v0.2.0** once this lands on `main`
 - [ ] File 3–5 **good first issues** (see CONTRIBUTING.md) so the repo looks open, not a dump
 - [ ] Pin a discussion or README FAQ: delayed data, unofficial Yahoo, no China listings
-- [ ] After a few users: add `CHANGELOG.md` and a `v0.2.0` tag rather than silent main commits
 - [ ] Optional: `pre-commit` only if it stays one ruff/format hook — do not bury contributors in tooling
 
 ## Roadmap
 
 ### v0.2 — make the current loop trustworthy
 
-- Tagged GitHub release and CI badge on the default branch.
-- Pin a small `holidays_overrides.json` (or documented extra-closures examples) for known future/past special closures without claiming completeness.
-- Earnings: if `FINNHUB_API_KEY` is set, use Finnhub’s earnings calendar as a fallback when yfinance has no date.
-- Quote object remains a dict, but document every field in one table (already started in LIMITATIONS.md); add a `--stale-after` warning when `as_of` is old during regular hours.
-- Keep unittest; do not require pytest yet.
+- [x] `data/holidays_overrides.json` for known unscheduled closures (incomplete; not a live NYSE feed)
+- [x] Official Alpaca calendar overlay when API keys are set
+- [x] Earnings without yfinance: Yahoo `calendarEvents`, then Finnhub, then Alpha Vantage
+- [x] Official quote path: Alpaca snapshot + daily bars first when keyed; Finnhub candles
+- [x] HTTP retries, `QuoteError` with status/hint, `--stale-after`
+- [x] Quote dict field table in LIMITATIONS.md
+- [ ] Tagged GitHub release `v0.2.0` after merge
 
 ### v0.3 — still no auto-trade
 
 - Optional notify sink (write a markdown snippet or JSON line) so HEARTBEAT can be cron + `ntfy`/email **without** the agent placing orders.
 - Intraday range alerts only when a keyed provider actually returns them; refuse to fake them from delayed daily bars.
 - Multi-watchlist files (`WATCHLIST_FILE` already exists — document profiles: swing vs long).
+- Cache Alpaca calendar on disk for the day so HEARTBEAT ticks do not hit `/v2/calendar` every 15 minutes.
 - International listings stay out of scope unless someone owns the calendar and a legal data source.
 
 Out of scope on purpose: CANSLIM, DCF, options payoff, live order entry. Point at the comparison table instead of growing into a junk drawer.

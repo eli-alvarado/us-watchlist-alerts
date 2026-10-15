@@ -12,7 +12,7 @@ import indicators as ind, market_calendar as mc, quotes as qt, watchlist as wlm
 
 DEFAULTS = {"cooldown_minutes": 240, "rearm_pct": 0.5, "sessions": ["regular"],
             "volume_spike_multiple": 2.0, "near_52w_pct": 2.0, "rsi_period": 14,
-            "earnings_days": 3, "max_alerts_per_run": 20}
+            "earnings_days": 3, "max_alerts_per_run": 20, "stale_after_seconds": 900}
 
 
 def _pct(a, b): return (a - b) / b * 100 if b else 0.0
@@ -145,14 +145,16 @@ DAILY = {"pct_change_up", "pct_change_down", "pct_move", "gap_up", "gap_down", "
          "new_52w_high", "new_52w_low", "golden_cross", "death_cross", "cross_above_ma", "cross_below_ma", "earnings_within"}
 
 
-def run(wl, state, quotes_by_sym, now, force_session=False):
+def run(wl, state, quotes_by_sym, now, force_session=False, stale_after=None):
     cfg = {**DEFAULTS, **(wl.get("settings") or {})}
     extra = mc.parse_dates(cfg.get("extra_closures"))
     cfg["_today"] = now.astimezone(mc.ET).date()
     sess = mc.session(now, extra=extra)
     out, errors = [], []
     if not force_session and sess not in cfg["sessions"]:
-        return {"session": sess, "skipped": True, "alerts": [], "errors": []}
+        return {"session": sess, "skipped": True, "alerts": [], "errors": [], "stale": []}
+    if stale_after is None:
+        stale_after = cfg.get("stale_after_seconds", DEFAULTS["stale_after_seconds"])
     trading_date = cfg["_today"].isoformat()
     cap = cfg["max_alerts_per_run"]
     truncated = False
@@ -183,7 +185,17 @@ def run(wl, state, quotes_by_sym, now, force_session=False):
                         lvl = float(lvl) if lvl not in (None, "None") else None
                         if r["type"].startswith("rsi") or lvl is None or abs(_pct(q["price"], lvl)) >= cfg["rearm_pct"]:
                             rec["active"] = False
-    res = {"session": sess, "skipped": False, "alerts": out, "errors": errors}
+    stale = []
+    if stale_after:
+        for t in wl["tickers"]:
+            q = quotes_by_sym.get(t["symbol"])
+            if not q or "error" in q:
+                continue
+            age = qt.quote_age_seconds(q, now)
+            if age is not None and age > stale_after and sess == "regular":
+                stale.append({"symbol": t["symbol"], "age_seconds": int(age), "as_of": q.get("as_of"),
+                              "source": q.get("source")})
+    res = {"session": sess, "skipped": False, "alerts": out, "errors": errors, "stale": stale}
     if truncated:
         res["truncated"] = True
     return res
@@ -198,16 +210,26 @@ def main(argv=None):
     ap.add_argument("--force-session", action="store_true", help="evaluate even outside configured sessions")
     ap.add_argument("--dry-run", action="store_true", help="do not write state")
     ap.add_argument("--format", choices=["json", "text"], default="text")
+    ap.add_argument("--stale-after", type=int, default=None,
+                    help="warn if quote as_of is older than N seconds during regular hours (0=off)")
     a = ap.parse_args(argv)
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
     if now.tzinfo is None: now = now.replace(tzinfo=mc.ET)
+    try:
+        mc.refresh_official_calendar(now.year)
+    except Exception as e:
+        print(f"WARN official NYSE overlay skipped: {e}", file=sys.stderr)
     wl = wlm.load(a.watchlist); state = load_state(a.state)
     warn = state.pop("warning", None)
     quotes = {}
     for t in wl["tickers"]:
         try: quotes[t["symbol"]] = qt.get_quote(t["symbol"], a.provider, a.fixture)
         except Exception as e: quotes[t["symbol"]] = {"error": str(e)}
-    res = run(wl, state, quotes, now, a.force_session)
+    stale_after = a.stale_after
+    if stale_after is None:
+        env = os.environ.get("WATCHLIST_STALE_AFTER")
+        stale_after = int(env) if env not in (None, "") else None
+    res = run(wl, state, quotes, now, a.force_session, stale_after=stale_after)
     if warn:
         res["state_warning"] = warn
     if not a.dry_run and not res["skipped"]: save_state(state, a.state)
@@ -223,6 +245,8 @@ def main(argv=None):
         if res.get("truncated"):
             print(f"WARN alert cap ({(wl.get('settings') or {}).get('max_alerts_per_run', DEFAULTS['max_alerts_per_run'])}) reached; remaining alerts left unlatched", file=sys.stderr)
         for e in res["errors"]: print(f"WARN {e['symbol']}: {e['error']}", file=sys.stderr)
+        for s in res.get("stale") or []:
+            print(f"WARN {s['symbol']}: quote is {s['age_seconds']}s old (as_of {s.get('as_of')}, source={s.get('source')})", file=sys.stderr)
     return 0
 
 
