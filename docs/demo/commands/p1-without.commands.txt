@@ -1,0 +1,247 @@
+# Command 1
+mkdir -p /tmp/demo-without/answers && python3 - <<'PY'
+import json, urllib.request, ssl
+
+symbols = ["AAPL", "NVDA", "SPY"]
+url = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=" + ",".join(symbols)
+req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+ctx = ssl.create_default_context()
+try:
+    with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
+        print("STATUS", resp.status)
+        print("URL", resp.geturl())
+        body = resp.read().decode("utf-8")
+        print(body)
+except Exception as e:
+    print("ERROR", type(e).__name__, e)
+PY
+
+# stdout
+ERROR HTTPError HTTP Error 401: Unauthorized
+
+# stderr
+(empty)
+
+# exit code
+0
+
+################################################################################
+# Command 2
+python3 - <<'PY'
+import json, urllib.request, ssl
+
+symbols = ["AAPL", "NVDA", "SPY"]
+ctx = ssl.create_default_context()
+for sym in symbols:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1d&range=5d"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; watchlist/1.0)"})
+    print("===", sym, "===")
+    try:
+        with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
+            print("STATUS", resp.status)
+            body = resp.read().decode("utf-8")
+            print(body[:8000])
+            print("---END---")
+    except Exception as e:
+        print("ERROR", type(e).__name__, e)
+PY
+
+# stdout
+=== AAPL ===
+STATUS 200
+{"chart":{"result":[{"meta":{"currency":"USD","symbol":"AAPL","exchangeName":"NMS","fullExchangeName":"NasdaqGS","instrumentType":"EQUITY","firstTradeDate":345479400,"regularMarketTime":1792094401,"hasPrePostMarketData":true,"gmtoffset":-14400,"timezone":"EDT","exchangeTimezoneName":"America/New_York","regularMarketPrice":342.0,"regularMarketChangePercent":-0.28,"fulldayPrice":341.48,"fulldayChange":-1.48,"fulldayChangePercent":-0.432,"fiftyTwoWeekHigh":348.15,"fiftyTwoWeekLow":243.42,"regularMarketDayHigh":347.85,"regularMarketDayLow":341.6,"regularMarketVolume":39605715,"longName":"Apple Inc.","shortName":"Apple Inc.","chartPreviousClose":340.42,"priceHint":2,"currentTradingPeriod":{"pre":{"timezone":"EDT","start":1792051200,"end":1792071000,"gmtoffset":-14400},"regular":{"timezone":"EDT","start":1792071000,"end":1792094400,"gmtoffset":-14400},"post":{"timezone":"EDT","start":1792094400,"end":1792108800,"gmtoffset":-14400}},"dataGranularity":"1d","range":"5d","validRanges":["1d","5d","1mo","3mo","6mo","1y","2y","5y","10y","ytd","max"]},"timestamp":[1791552600,1791811800,1791898200,1791984600,1792071000],"indicators":{"quote":[{"open":[331.70001220703125,338.2200012207031,344.6700134277344,344.6099853515625,346.95001220703125],"high":[338.6099853515625,342.6300048828125,348.1499938964844,347.0899963378906,347.8500061035156],"volume":[37881200,25900600,38983800,50061100,39605715],"low":[330.70001220703125,337.6000061035156,340.739990234375,341.7200012207031,341.6000061035156],"close":[336.6400146484375,340.9700012207031,341.2699890136719,342.9599914550781,342.0]}],"adjclose":[{"adjclose":[336.6400146484375,340.9700012207031,341.2699890136719,342.9599914550781,342.0]}]}}],"error":null}}
+---END---
+=== NVDA ===
+STATUS 200
+{"chart":{"result":[{"meta":{"currency":"USD","symbol":"NVDA","exchangeName":"NMS","fullExchangeName":"NasdaqGS","instrumentType":"EQUITY","firstTradeDate":917015400,"regularMarketTime":1792094400,"hasPrePostMarketData":true,"gmtoffset":-14400,"timezone":"EDT","exchangeTimezoneName":"America/New_York","regularMarketPrice":217.23,"regularMarketChangePercent":-1.839,"fulldayPrice":217.418,"fulldayChange":-3.882,"fulldayChangePercent":-1.754,"fiftyTwoWeekHigh":243.37,"fiftyTwoWeekLow":164.27,"regularMarketDayHigh":218.469,"regularMarketDayLow":212.85,"regularMarketVolume":126396690,"longName":"NVIDIA Corporation","shortName":"NVIDIA Corporation","chartPreviousClose":230.48,"priceHint":2,"currentTradingPeriod":{"pre":{"timezone":"EDT","end":1792071000,"start":1792051200,"gmtoffset":-14400},"regular":{"timezone":"EDT","end":1792094400,"start":1792071000,"gmtoffset":-14400},"post":{"timezone":"EDT","end":1792108800,"start":1792094400,"gmtoffset":-14400}},"dataGranularity":"1d","range":"5d","validRanges":["1d","5d","1mo","3mo","6mo","1y","2y","5y","10y","ytd","max"]},"timestamp":[1791552600,1791811800,1791898200,1791984600,1792071000],"indicators":{"quote":[{"low":[229.11000061035156,224.89999389648438,223.05999755859375,219.63999938964844,212.85000610351562],"high":[233.9199981689453,228.86000061035156,228.63999938964844,226.0,218.4691925048828],"open":[233.83999633789062,228.72999572753906,224.33999633789062,225.52999877929688,215.33999633789062],"close":[229.27999877929688,226.32000732421875,228.52000427246094,221.3000030517578,217.22999572753906],"volume":[84645600,70690300,84036900,118730100,126396690]}],"adjclose":[{"adjclose":[229.27999877929688,226.32000732421875,228.52000427246094,221.3000030517578,217.22999572753906]}]}}],"error":null}}
+---END---
+=== SPY ===
+STATUS 200
+{"chart":{"result":[{"meta":{"currency":"USD","symbol":"SPY","exchangeName":"PCX","fullExchangeName":"NYSEArca","instrumentType":"ETF","firstTradeDate":728317800,"regularMarketTime":1792094400,"hasPrePostMarketData":true,"gmtoffset":-14400,"timezone":"EDT","exchangeTimezoneName":"America/New_York","regularMarketPrice":771.79,"regularMarketChangePercent":0.285,"fulldayPrice":771.54,"fulldayChange":1.94,"fulldayChangePercent":0.252,"fiftyTwoWeekHigh":781.62,"fiftyTwoWeekLow":629.28,"regularMarketDayHigh":772.87,"regularMarketDayLow":764.44,"regularMarketVolume":42916599,"longName":"State Street SPDR S&P 500 ETF Trust","shortName":"State Street SPDR S&P 500 ETF T","chartPreviousClose":773.93,"priceHint":2,"currentTradingPeriod":{"pre":{"timezone":"EDT","start":1792051200,"end":1792071000,"gmtoffset":-14400},"regular":{"timezone":"EDT","start":1792071000,"end":1792094400,"gmtoffset":-14400},"post":{"timezone":"EDT","start":1792094400,"end":1792108800,"gmtoffset":-14400}},"dataGranularity":"1d","range":"5d","validRanges":["1d","5d","1mo","3mo","6mo","1y","2y","5y","10y","ytd","max"]},"timestamp":[1791552600,1791811800,1791898200,1791984600,1792071000],"indicators":{"quote":[{"close":[778.5700073242188,778.0999755859375,778.010009765625,769.5999755859375,771.7899780273438],"volume":[22624500,18685000,25848000,55715400,42916599],"high":[779.4199829101562,779.4000244140625,778.75,776.3499755859375,772.8699951171875],"low":[775.1400146484375,777.0499877929688,775.9500122070312,766.7100219726562,764.4400024414062],"open":[776.239990234375,778.780029296875,777.3400268554688,774.9199829101562,766.25]}],"adjclose":[{"adjclose":[778.5700073242188,778.0999755859375,778.010009765625,769.5999755859375,771.7899780273438]}]}}],"error":null}}
+---END---
+
+# stderr
+(empty)
+
+# exit code
+0
+
+################################################################################
+# Command 3
+python3 - <<'PY'
+from datetime import datetime, timezone
+try:
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo("America/New_York")
+except Exception as e:
+    print("zoneinfo error", e)
+    tz = timezone.utc
+
+times = {
+    "AAPL regularMarketTime": 1792094401,
+    "NVDA regularMarketTime": 1792094400,
+    "SPY regularMarketTime": 1792094400,
+    "regular start": 1792071000,
+    "regular end": 1792094400,
+    "pre start": 1792051200,
+    "post end": 1792108800,
+    "AAPL last bar ts": 1792071000,
+    "prev bar ts": 1791984600,
+}
+for k, v in times.items():
+    dt = datetime.fromtimestamp(v, tz=timezone.utc).astimezone(tz)
+    print(f"{k}: {v} -> {dt.isoformat()} ({dt.strftime('%A %Y-%m-%d %H:%M:%S %Z')})")
+
+print()
+# compute pct vs prev close from daily bars
+quotes = {
+    "AAPL": {"price": 342.0, "prev": 342.9599914550781, "rmcp": -0.28, "day_low": 341.6, "day_high": 347.85, "open": 346.95001220703125, "vol": 39605715, "name": "Apple Inc."},
+    "NVDA": {"price": 217.23, "prev": 221.3000030517578, "rmcp": -1.839, "day_low": 212.85, "day_high": 218.469, "open": 215.33999633789062, "vol": 126396690, "name": "NVIDIA Corporation"},
+    "SPY": {"price": 771.79, "prev": 769.5999755859375, "rmcp": 0.285, "day_low": 764.44, "day_high": 772.87, "open": 766.25, "vol": 42916599, "name": "SPDR S&P 500 ETF Trust"},
+}
+for s, q in quotes.items():
+    chg = q["price"] - q["prev"]
+    pct = chg / q["prev"] * 100
+    from_high = (q["price"] - q["day_high"]) / q["day_high"] * 100
+    from_open = (q["price"] - q["open"]) / q["open"] * 100
+    print(f"{s}: last={q['price']} prev_close={q['prev']:.4f} chg={chg:.4f} pct={pct:.3f}% (yahoo {q['rmcp']}) from_open={from_open:.3f}% from_high={from_high:.3f}% low={q['day_low']}")
+    print(f"  3% drop vs prev close would be price <= {q['prev']*0.97:.4f}")
+    print(f"  day low vs prev close: {(q['day_low']-q['prev'])/q['prev']*100:.3f}%")
+PY
+
+# stdout
+AAPL regularMarketTime: 1792094401 -> 2026-10-15T16:00:01-04:00 (Thursday 2026-10-15 16:00:01 EDT)
+NVDA regularMarketTime: 1792094400 -> 2026-10-15T16:00:00-04:00 (Thursday 2026-10-15 16:00:00 EDT)
+SPY regularMarketTime: 1792094400 -> 2026-10-15T16:00:00-04:00 (Thursday 2026-10-15 16:00:00 EDT)
+regular start: 1792071000 -> 2026-10-15T09:30:00-04:00 (Thursday 2026-10-15 09:30:00 EDT)
+regular end: 1792094400 -> 2026-10-15T16:00:00-04:00 (Thursday 2026-10-15 16:00:00 EDT)
+pre start: 1792051200 -> 2026-10-15T04:00:00-04:00 (Thursday 2026-10-15 04:00:00 EDT)
+post end: 1792108800 -> 2026-10-15T20:00:00-04:00 (Thursday 2026-10-15 20:00:00 EDT)
+AAPL last bar ts: 1792071000 -> 2026-10-15T09:30:00-04:00 (Thursday 2026-10-15 09:30:00 EDT)
+prev bar ts: 1791984600 -> 2026-10-14T09:30:00-04:00 (Wednesday 2026-10-14 09:30:00 EDT)
+
+AAPL: last=342.0 prev_close=342.9600 chg=-0.9600 pct=-0.280% (yahoo -0.28) from_open=-1.427% from_high=-1.682% low=341.6
+  3% drop vs prev close would be price <= 332.6712
+  day low vs prev close: -0.397%
+NVDA: last=217.23 prev_close=221.3000 chg=-4.0700 pct=-1.839% (yahoo -1.839) from_open=0.878% from_high=-0.567% low=212.85
+  3% drop vs prev close would be price <= 214.6610
+  day low vs prev close: -3.818%
+SPY: last=771.79 prev_close=769.6000 chg=2.1900 pct=0.285% (yahoo 0.285) from_open=0.723% from_high=-0.140% low=764.44
+  3% drop vs prev close would be price <= 746.5120
+  day low vs prev close: -0.670%
+
+# stderr
+(empty)
+
+# exit code
+0
+
+################################################################################
+# Command 4
+python3 - <<'PY'
+import json, urllib.request, ssl
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+tz = ZoneInfo("America/New_York")
+ctx = ssl.create_default_context()
+symbols = ["AAPL", "NVDA", "SPY"]
+for sym in symbols:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1m&range=1d&includePrePost=true"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; watchlist/1.0)"})
+    print("===", sym, "1m ===")
+    try:
+        with urllib.request.urlopen(req, context=ctx, timeout=20) as resp:
+            print("STATUS", resp.status)
+            data = json.loads(resp.read().decode("utf-8"))
+            r = data["chart"]["result"][0]
+            meta = r["meta"]
+            keys = ["regularMarketPrice","regularMarketChangePercent","chartPreviousClose","previousClose","fulldayPrice","fulldayChange","fulldayChangePercent","regularMarketTime","postMarketPrice","postMarketChangePercent","currentTradingPeriod"]
+            for k in keys:
+                if k in meta:
+                    print(f"  {k}: {meta[k]}")
+            ts = r.get("timestamp") or []
+            q = r["indicators"]["quote"][0]
+            closes = q.get("close") or []
+            # last non-null close
+            last_i = None
+            for i in range(len(closes)-1, -1, -1):
+                if closes[i] is not None:
+                    last_i = i
+                    break
+            if last_i is not None:
+                dt = datetime.fromtimestamp(ts[last_i], tz=timezone.utc).astimezone(tz)
+                print(f"  last 1m close: {closes[last_i]} at {dt.isoformat()}")
+            print("  n timestamps", len(ts))
+            print("  meta timezone", meta.get("timezone"), meta.get("exchangeTimezoneName"))
+            # previousClose field dump of extra meta
+            extra = {k: meta[k] for k in meta if "close" in k.lower() or "price" in k.lower() or "change" in k.lower() or k in ("symbol","regularMarketTime")}
+            print("  extra", json.dumps(extra, default=str)[:2000])
+    except Exception as e:
+        print("ERROR", type(e).__name__, e)
+PY
+
+# stdout
+=== AAPL 1m ===
+STATUS 200
+  regularMarketPrice: 342.0
+  regularMarketChangePercent: -0.28
+  chartPreviousClose: 342.96
+  previousClose: 342.96
+  fulldayPrice: 341.48
+  fulldayChange: -1.48
+  fulldayChangePercent: -0.432
+  regularMarketTime: 1792094401
+  currentTradingPeriod: {'pre': {'timezone': 'EDT', 'start': 1792051200, 'end': 1792071000, 'gmtoffset': -14400}, 'regular': {'timezone': 'EDT', 'start': 1792071000, 'end': 1792094400, 'gmtoffset': -14400}, 'post': {'timezone': 'EDT', 'start': 1792094400, 'end': 1792108800, 'gmtoffset': -14400}}
+  last 1m close: 341.48 at 2026-10-15T18:50:35-04:00
+  n timestamps 787
+  meta timezone EDT America/New_York
+  extra {"symbol": "AAPL", "exchangeName": "NMS", "fullExchangeName": "NasdaqGS", "regularMarketTime": 1792094401, "exchangeTimezoneName": "America/New_York", "regularMarketPrice": 342.0, "regularMarketChangePercent": -0.28, "fulldayPrice": 341.48, "fulldayChange": -1.48, "fulldayChangePercent": -0.432, "chartPreviousClose": 342.96, "previousClose": 342.96, "priceHint": 2}
+=== NVDA 1m ===
+STATUS 200
+  regularMarketPrice: 217.23
+  regularMarketChangePercent: -1.839
+  chartPreviousClose: 221.3
+  previousClose: 221.3
+  fulldayPrice: 217.418
+  fulldayChange: -3.882
+  fulldayChangePercent: -1.754
+  regularMarketTime: 1792094400
+  currentTradingPeriod: {'pre': {'timezone': 'EDT', 'start': 1792051200, 'end': 1792071000, 'gmtoffset': -14400}, 'regular': {'timezone': 'EDT', 'start': 1792071000, 'end': 1792094400, 'gmtoffset': -14400}, 'post': {'timezone': 'EDT', 'start': 1792094400, 'end': 1792108800, 'gmtoffset': -14400}}
+  last 1m close: 217.4183 at 2026-10-15T18:50:19-04:00
+  n timestamps 882
+  meta timezone EDT America/New_York
+  extra {"symbol": "NVDA", "exchangeName": "NMS", "fullExchangeName": "NasdaqGS", "regularMarketTime": 1792094400, "exchangeTimezoneName": "America/New_York", "regularMarketPrice": 217.23, "regularMarketChangePercent": -1.839, "fulldayPrice": 217.418, "fulldayChange": -3.882, "fulldayChangePercent": -1.754, "chartPreviousClose": 221.3, "previousClose": 221.3, "priceHint": 2}
+=== SPY 1m ===
+STATUS 200
+  regularMarketPrice: 771.79
+  regularMarketChangePercent: 0.285
+  chartPreviousClose: 769.6
+  previousClose: 769.6
+  fulldayPrice: 771.54
+  fulldayChange: 1.94
+  fulldayChangePercent: 0.252
+  regularMarketTime: 1792094400
+  currentTradingPeriod: {'pre': {'timezone': 'EDT', 'end': 1792071000, 'start': 1792051200, 'gmtoffset': -14400}, 'regular': {'timezone': 'EDT', 'end': 1792094400, 'start': 1792071000, 'gmtoffset': -14400}, 'post': {'timezone': 'EDT', 'end': 1792108800, 'start': 1792094400, 'gmtoffset': -14400}}
+  last 1m close: 771.54 at 2026-10-15T18:50:49-04:00
+  n timestamps 836
+  meta timezone EDT America/New_York
+  extra {"symbol": "SPY", "exchangeName": "PCX", "fullExchangeName": "NYSEArca", "regularMarketTime": 1792094400, "exchangeTimezoneName": "America/New_York", "regularMarketPrice": 771.79, "regularMarketChangePercent": 0.285, "fulldayPrice": 771.54, "fulldayChange": 1.94, "fulldayChangePercent": 0.252, "chartPreviousClose": 769.6, "previousClose": 769.6, "priceHint": 2}
+
+# stderr
+(empty)
+
+# exit code
+0
+
+################################################################################
+# Command 5
+python3 -c 'import json; json.load(open("/tmp/demo-without/watchlist.json")); print("watchlist.json: valid JSON")'
+
+# stdout
+watchlist.json: valid JSON
+
+# stderr
+(empty)
+
+# exit code
+0

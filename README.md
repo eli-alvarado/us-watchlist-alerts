@@ -12,6 +12,21 @@ Works in **Claude Code, Codex CLI, Cursor, Gemini CLI** and any agent that reads
 
 Demo above is **offline**, driven by `tests/fixtures/` (the same data CI uses). It shows the after-hours banner (`market closed, showing last regular close`) and a second run that stays silent. Live Yahoo/yfinance numbers will differ and may be delayed ~15 minutes.
 
+## With vs. without the skill
+
+Live A/B on **2026-10-15 ~18:50 ET** (after the regular close) with **Cursor Grok 4.6**. Same starting `watchlist.json`. Isolated subagents: one folder had only the JSON, the other had `npx`-style skills under `.agents/skills/`. Transcripts are unedited in [`docs/demo/`](docs/demo/).
+
+The without-skill agent **did fine** on every prompt — live Yahoo prints, correct % vs prior close, official NYSE calendar in the browser. The skill is not “the only way to get a quote.” What changed:
+
+| Prompt | Without the skill | With the skill | Difference |
+|---|---|---|---|
+| Watch AAPL, NVDA, SPY and alert me if any drops 3% today | No 3% close-to-close drop. Also flagged NVDA’s session low **−3.82%** that recovered | Same last prints; persisted `pct_change_down:3`; last-close banner; also fired existing target / 52w / $240 rules | **Clearest.** Heartbeat + persist vs one-shot research. Skill ignores a recovered intraday low; without reported it |
+| Give me a morning brief on my watchlist | Long per-ticker recap (AH prints, P/E, hand-checked rules), still titled “morning” | Refused the morning label (`session=after`), ran `brief.py --kind close` | Session honesty vs a richer essay |
+| Is the market open tomorrow? | Yes — Fri 2026-10-16, 09:30–16:00 ET (NYSE web) | Yes — same, from `market_calendar.py` | Agree |
+| Is the market open on Friday, November 27, 2026? | Yes, **early close 1:00 PM ET** (NYSE page; also options 1:15 / late 5:00) | Yes, **early close 1:00 PM ET** (local calendar; after-hours to 17:00) | Agree on equities; without had more venue detail |
+
+Full replies, command logs, and side-by-side images: [docs/demo/README.md](docs/demo/README.md).
+
 ## What's inside
 
 | Skill | What it does |

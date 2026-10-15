@@ -1,0 +1,241 @@
+# cwd: /tmp/demo-with
+# All commands below were run from /tmp/demo-with unless noted.
+
+$ mkdir -p /tmp/demo-with/answers
+--- stdout ---
+--- stderr ---
+--- exit: 0 ---
+
+$ python3 .agents/skills/price-alerts/scripts/market_calendar.py
+--- stdout ---
+2026-10-15 18:51 EDT session=after trading_day=True
+--- stderr ---
+--- exit: 0 ---
+
+$ python3 .agents/skills/price-alerts/scripts/quotes.py AAPL NVDA SPY
+--- stdout ---
+{
+  "AAPL": {
+    "symbol": "AAPL",
+    "price": 342.0,
+    "prev_close": 342.9599914550781,
+    "open": 346.95001220703125,
+    "day_high": 347.85,
+    "day_low": 341.6,
+    "volume": 39605715,
+    "high_52w": 348.15,
+    "low_52w": 243.42,
+    "source": "yahoo-chart",
+    "as_of": "2026-10-15T20:00:01+00:00",
+    "avg_volume_20d": 38171150.0,
+    "earnings_date": "2026-11-02",
+    "earnings_source": "yahoo-calendar",
+    "atm_iv": null,
+    "iv_expiry": null,
+    "iv_source": null,
+    "stale": true,
+    "age_seconds": 10262
+  },
+  "NVDA": {
+    "symbol": "NVDA",
+    "price": 217.23,
+    "prev_close": 221.3000030517578,
+    "open": 215.33999633789062,
+    "day_high": 218.469,
+    "day_low": 212.85,
+    "volume": 126396690,
+    "high_52w": 243.37,
+    "low_52w": 164.27,
+    "source": "yahoo-chart",
+    "as_of": "2026-10-15T20:00:00+00:00",
+    "avg_volume_20d": 106688655.0,
+    "earnings_date": "2026-11-17",
+    "earnings_source": "yahoo-calendar",
+    "atm_iv": null,
+    "iv_expiry": null,
+    "iv_source": null,
+    "stale": true,
+    "age_seconds": 10263
+  },
+  "SPY": {
+    "symbol": "SPY",
+    "price": 771.79,
+    "prev_close": 769.5999755859375,
+    "open": 766.25,
+    "day_high": 772.87,
+    "day_low": 764.44,
+    "volume": 42916599,
+    "high_52w": 781.62,
+    "low_52w": 629.28,
+    "source": "yahoo-chart",
+    "as_of": "2026-10-15T20:00:00+00:00",
+    "avg_volume_20d": 42343155.0,
+    "earnings_date": null,
+    "earnings_source": null,
+    "atm_iv": null,
+    "iv_expiry": null,
+    "iv_source": null,
+    "earnings_error": "earnings date unavailable \u2014 yahoo-calendar, yahoo-html, nasdaq returned no date (common for ETFs; confirm on the issuer IR page)",
+    "stale": true,
+    "age_seconds": 10263
+  }
+}
+--- stderr ---
+--- exit: 0 ---
+
+$ python3 .agents/skills/price-alerts/scripts/watchlist.py --file /tmp/demo-with/watchlist.json add SPY --side watch --alert pct_change_down:3
+--- stdout ---
+{
+  "symbol": "SPY",
+  "added": "2026-10-15",
+  "side": "watch",
+  "thesis": "",
+  "entry": null,
+  "targets": [],
+  "stop": null,
+  "tags": [],
+  "alerts": [
+    {
+      "type": "pct_change_down",
+      "value": 3.0
+    }
+  ],
+  "notes": ""
+}
+--- stderr ---
+--- exit: 0 ---
+
+$ python3 .agents/skills/price-alerts/scripts/watchlist.py --file /tmp/demo-with/watchlist.json update AAPL --alert pct_change_down:3 --append
+--- stdout ---
+{
+  "symbol": "AAPL",
+  "side": "long",
+  "added": "2026-10-01",
+  "thesis": "Services margin expansion + iPhone upgrade cycle",
+  "entry": 225.0,
+  "targets": [
+    250.0,
+    270.0
+  ],
+  "stop": 210.0,
+  "tags": [
+    "megacap",
+    "consumer-tech"
+  ],
+  "alerts": [
+    {
+      "type": "price_above",
+      "value": 240
+    },
+    {
+      "type": "near_52w_high",
+      "value": 2
+    },
+    {
+      "type": "earnings_within",
+      "value": 14
+    },
+    {
+      "type": "rsi_above",
+      "value": 75
+    },
+    {
+      "type": "pct_change_down",
+      "value": 3.0
+    }
+  ],
+  "notes": "",
+  "updated": "2026-10-15"
+}
+--- stderr ---
+--- exit: 0 ---
+
+$ python3 .agents/skills/price-alerts/scripts/watchlist.py --file /tmp/demo-with/watchlist.json update NVDA --alert pct_change_down:3 --append
+--- stdout ---
+{
+  "symbol": "NVDA",
+  "side": "long",
+  "added": "2026-10-01",
+  "thesis": "AI datacenter capex",
+  "entry": 160.0,
+  "targets": [
+    190.0
+  ],
+  "stop": 140.0,
+  "tags": [
+    "ai",
+    "semis"
+  ],
+  "alerts": [
+    {
+      "type": "golden_cross",
+      "fast": 50,
+      "slow": 200
+    },
+    {
+      "type": "cross_below_ma",
+      "value": 50
+    },
+    {
+      "type": "price_below",
+      "value": 150,
+      "cooldown_minutes": 60
+    },
+    {
+      "type": "pct_change_down",
+      "value": 3.0
+    }
+  ],
+  "notes": "",
+  "updated": "2026-10-15"
+}
+--- stderr ---
+--- exit: 0 ---
+
+$ python3 .agents/skills/price-alerts/scripts/watchlist.py --file /tmp/demo-with/watchlist.json validate
+--- stdout ---
+OK
+--- stderr ---
+--- exit: 0 ---
+
+$ python3 .agents/skills/price-alerts/scripts/watchlist.py --file /tmp/demo-with/watchlist.json list
+--- stdout ---
+AAPL    entry=225.0 stop=210.0 targets=[250.0, 270.0] tags=megacap,consumer-tech  Services margin expansion + iPhone upgrade cycle
+TSLA    entry=None stop=None targets=[] tags=ev,high-beta  Waiting for capitulation volume before considering entry
+NVDA    entry=160.0 stop=140.0 targets=[190.0] tags=ai,semis  AI datacenter capex
+SPY     entry=None stop=None targets=[] tags=  
+--- stderr ---
+--- exit: 0 ---
+
+$ python3 .agents/skills/price-alerts/scripts/watchlist.py --file /tmp/demo-with/watchlist.json show SPY
+--- stdout ---
+{
+  "symbol": "SPY",
+  "added": "2026-10-15",
+  "side": "watch",
+  "thesis": "",
+  "entry": null,
+  "targets": [],
+  "stop": null,
+  "tags": [],
+  "alerts": [
+    {
+      "type": "pct_change_down",
+      "value": 3.0
+    }
+  ],
+  "notes": ""
+}
+--- stderr ---
+--- exit: 0 ---
+
+$ python3 .agents/skills/price-alerts/scripts/alerts.py --watchlist /tmp/demo-with/watchlist.json --state /tmp/demo-with/.alert_state.json
+--- stdout ---
+[2026-10-15 18:51 ET] session=after — market closed, showing last regular close
+ALERT AAPL $342.00 is above $240.00
+ALERT AAPL within 1.8% of 52w high $348.15
+ALERT AAPL $342.00 reached target $250.00
+ALERT AAPL $342.00 reached target $270.00
+ALERT NVDA $217.23 reached target $190.00
+--- stderr ---
+--- exit: 0 ---

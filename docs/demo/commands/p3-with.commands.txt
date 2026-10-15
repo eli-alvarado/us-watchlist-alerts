@@ -1,0 +1,59 @@
+# cwd: /tmp/demo-with
+python3 .agents/skills/price-alerts/scripts/market_calendar.py
+--- stdout ---
+2026-10-15 18:50 EDT session=after trading_day=True
+--- stderr ---
+(empty)
+--- exit ---
+0
+
+# cwd: /tmp/demo-with
+python3 -c "
+import sys, datetime as dt
+sys.path.insert(0, '.agents/skills/price-alerts/scripts')
+import market_calendar as mc
+tomorrow = dt.date(2026, 10, 16)
+print('tomorrow=', tomorrow.isoformat(), tomorrow.strftime('%A'))
+print('is_trading_day=', mc.is_trading_day(tomorrow))
+print('holiday_name=', mc.holiday_name(tomorrow))
+print('early_close=', tomorrow in mc.early_closes(tomorrow.year))
+print('next_trading_day_from_today=', mc.next_trading_day(dt.date(2026, 10, 15)))
+print('weekday=', tomorrow.weekday())
+hol = mc.nyse_holidays(2026)
+print('2026 holidays:')
+for d, name in sorted(hol.items()):
+    print(f'  {d.isoformat()} {name}')
+print('early_closes_2026:', sorted(mc.early_closes(2026)))
+"
+--- stdout ---
+tomorrow= 2026-10-16 Friday
+is_trading_day= True
+holiday_name= None
+early_close= False
+next_trading_day_from_today= 2026-10-16
+weekday= 4
+2026 holidays:
+  2026-01-01 New Year's Day
+  2026-01-19 Martin Luther King Jr. Day
+  2026-02-16 Washington's Birthday
+  2026-04-03 Good Friday
+  2026-05-25 Memorial Day
+  2026-06-19 Juneteenth
+  2026-07-03 Independence Day
+  2026-09-07 Labor Day
+  2026-11-26 Thanksgiving Day
+  2026-12-25 Christmas Day
+early_closes_2026: [datetime.date(2026, 11, 27), datetime.date(2026, 12, 24)]
+--- stderr ---
+(empty)
+--- exit ---
+0
+
+# cwd: /tmp/demo-with
+mkdir -p /tmp/demo-with/answers
+--- stdout ---
+(empty)
+--- stderr ---
+(empty)
+--- exit ---
+0

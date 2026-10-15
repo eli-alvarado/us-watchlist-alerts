@@ -1,0 +1,775 @@
+# Commands run for morning brief (2026-10-15)
+# Each block is the command followed by raw stdout/stderr.
+
+========== COMMAND 1 ==========
+ls -la /tmp/demo-without && echo "---" && cat /tmp/demo-without/watchlist.json
+
+--- STDOUT ---
+total 24
+drwxr-xr-x    3 ubuntu ubuntu  4096 Oct 15 22:49 .
+drwxrwxrwt. 208 root   root   12288 Oct 15 22:49 ..
+drwxr-xr-x    2 ubuntu ubuntu  4096 Oct 15 22:49 answers
+-rw-r--r--    1 ubuntu ubuntu  1719 Oct 15 22:49 watchlist.json
+---
+{
+  "version": 1,
+  "settings": {
+    "cooldown_minutes": 240,
+    "rearm_pct": 0.5,
+    "sessions": ["regular"],
+    "volume_spike_multiple": 2.0,
+    "near_52w_pct": 2.0,
+    "earnings_days": 3,
+    "max_alerts_per_run": 20,
+    "timezone_display": "America/New_York"
+  },
+  "tickers": [
+    {
+      "symbol": "AAPL", "side": "long", "added": "2026-10-01",
+      "thesis": "Services margin expansion + iPhone upgrade cycle",
+      "entry": 225.0, "targets": [250.0, 270.0], "stop": 210.0,
+      "tags": ["megacap", "consumer-tech"],
+      "alerts": [
+        {"type": "price_above", "value": 240},
+        {"type": "near_52w_high", "value": 2},
+        {"type": "earnings_within", "value": 14},
+        {"type": "rsi_above", "value": 75}
+      ],
+      "notes": ""
+    },
+    {
+      "symbol": "TSLA", "side": "watch", "added": "2026-10-01",
+      "thesis": "Waiting for capitulation volume before considering entry",
+      "entry": null, "targets": [], "stop": null,
+      "tags": ["ev", "high-beta"],
+      "alerts": [
+        {"type": "pct_change_down", "value": 5},
+        {"type": "gap_down", "value": 3},
+        {"type": "volume_spike", "value": 2.5},
+        {"type": "rsi_below", "value": 30},
+        {"type": "earnings_within", "value": 3}
+      ],
+      "notes": ""
+    },
+    {
+      "symbol": "NVDA", "side": "long", "added": "2026-10-01",
+      "thesis": "AI datacenter capex",
+      "entry": 160.0, "targets": [190.0], "stop": 140.0,
+      "tags": ["ai", "semis"],
+      "alerts": [
+        {"type": "golden_cross", "fast": 50, "slow": 200},
+        {"type": "cross_below_ma", "value": 50},
+        {"type": "price_below", "value": 150, "cooldown_minutes": 60}
+      ],
+      "notes": ""
+    }
+  ]
+}
+
+--- STDERR ---
+(empty)
+--- EXIT ---
+0
+
+========== COMMAND 2 ==========
+python3 << 'PY'
+import json, urllib.request, urllib.error, ssl, datetime
+
+ctx = ssl.create_default_context()
+symbols = ["AAPL", "TSLA", "NVDA"]
+
+def fetch(url, headers=None):
+    req = urllib.request.Request(url, headers=headers or {
+        "User-Agent": "Mozilla/5.0 (compatible; morning-brief/1.0)",
+        "Accept": "application/json",
+    })
+    with urllib.request.urlopen(req, timeout=20, context=ctx) as r:
+        return r.getcode(), r.read()
+
+# Yahoo quote
+url = "https://query1.finance.yahoo.com/v7/finance/quote?symbols=" + ",".join(symbols)
+print("=== QUOTE URL ===")
+print(url)
+try:
+    code, body = fetch(url)
+    print("HTTP", code)
+    data = json.loads(body)
+    print(json.dumps(data, indent=2)[:20000])
+except Exception as e:
+    print("QUOTE ERROR:", type(e).__name__, e)
+PY
+
+--- STDOUT ---
+=== QUOTE URL ===
+https://query1.finance.yahoo.com/v7/finance/quote?symbols=AAPL,TSLA,NVDA
+QUOTE ERROR: HTTPError HTTP Error 401: Unauthorized
+
+--- STDERR ---
+(empty)
+--- EXIT ---
+0
+
+========== COMMAND 3 ==========
+python3 << 'PY'
+import json, urllib.request, urllib.error, ssl, http.cookiejar
+
+ctx = ssl.create_default_context()
+cj = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPSHandler(context=ctx))
+
+def fetch(url, headers=None):
+    req = urllib.request.Request(url, headers=headers or {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json,text/plain,*/*",
+    })
+    with opener.open(req, timeout=20) as r:
+        return r.getcode(), dict(r.headers), r.read()
+
+print("=== GET crumb ===")
+try:
+    code, headers, body = fetch("https://fc.yahoo.com")
+    print("fc.yahoo.com HTTP", code, "len", len(body))
+except Exception as e:
+    print("fc.yahoo.com ERROR:", type(e).__name__, e)
+
+try:
+    code, headers, body = fetch("https://query1.finance.yahoo.com/v1/test/getcrumb")
+    print("crumb HTTP", code, "body", body.decode()[:200])
+    crumb = body.decode()
+except Exception as e:
+    print("crumb ERROR:", type(e).__name__, e)
+    crumb = None
+
+print("cookies:", [(c.name, c.value[:40] if c.value else None) for c in cj])
+
+if crumb:
+    url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols=AAPL,TSLA,NVDA&crumb={urllib.request.quote(crumb)}"
+    print("=== QUOTE with crumb ===")
+    try:
+        code, headers, body = fetch(url)
+        print("HTTP", code)
+        data = json.loads(body)
+        print(json.dumps(data, indent=2)[:15000])
+    except Exception as e:
+        print("QUOTE ERROR:", type(e).__name__, e)
+PY
+
+--- STDOUT ---
+=== GET crumb ===
+fc.yahoo.com ERROR: HTTPError HTTP Error 404: Not Found on Accelerator
+crumb HTTP 200 body .VNO7gbDIhi
+cookies: [('A3', 'd=AQABBMFY0WoCEDjH299upju5G3lERGrBGQoFEg')]
+=== QUOTE with crumb ===
+HTTP 200
+{
+  "quoteResponse": {
+    "result": [
+      {
+        "language": "en-US",
+        "region": "US",
+        "quoteType": "EQUITY",
+        "typeDisp": "Equity",
+        "quoteSourceName": "Nasdaq Real Time Price",
+        "triggerable": true,
+        "customPriceAlertConfidence": "HIGH",
+        "currency": "USD",
+        "marketState": "POST",
+        "longName": "Apple Inc.",
+        "shortName": "Apple Inc.",
+        "corporateActions": [],
+        "postMarketTime": 1792104635,
+        "regularMarketTime": 1792094401,
+        "exchange": "NMS",
+        "messageBoardId": "finmb_24937",
+        "exchangeTimezoneName": "America/New_York",
+        "exchangeTimezoneShortName": "EDT",
+        "gmtOffSetMilliseconds": -14400000,
+        "market": "us_market",
+        "esgPopulated": false,
+        "hasPrePostMarketData": true,
+        "firstTradeDateMilliseconds": 345479400000,
+        "priceHint": 2,
+        "postMarketChangePercent": -0.15204357,
+        "postMarketPrice": 341.48,
+        "postMarketChange": -0.519989,
+        "regularMarketChange": -0.95999146,
+        "regularMarketChangePercent": -0.27991354,
+        "fulldayChange": -1.4799805,
+        "fulldayChangePercent": -0.43153152,
+        "fulldayPrice": 341.48,
+        "regularMarketPrice": 342.0,
+        "regularMarketDayHigh": 347.85,
+        "regularMarketDayRange": "341.6 - 347.85",
+        "regularMarketDayLow": 341.6,
+        "regularMarketVolume": 39605715,
+        "regularMarketPreviousClose": 342.96,
+        "bid": 343.01,
+        "ask": 347.98,
+        "bidSize": 4,
+        "askSize": 4,
+        "fullExchangeName": "NasdaqGS",
+        "financialCurrency": "USD",
+        "regularMarketOpen": 346.95,
+        "averageDailyVolume3Month": 44865393,
+        "averageDailyVolume10Day": 35654240,
+        "fiftyTwoWeekLowChange": 98.58,
+        "fiftyTwoWeekLowChangePercent": 0.40497905,
+        "fiftyTwoWeekRange": "243.42 - 348.15",
+        "fiftyTwoWeekHighChange": -6.149994,
+        "fiftyTwoWeekHighChangePercent": -0.017664783,
+        "fiftyTwoWeekLow": 243.42,
+        "fiftyTwoWeekHigh": 348.15,
+        "fiftyTwoWeekChangePercent": 38.59769,
+        "dividendDate": 1786579200,
+        "earningsTimestamp": 1793649600,
+        "earningsTimestampStart": 1793649600,
+        "earningsTimestampEnd": 1793649600,
+        "earningsCallTimestampStart": 1793649600,
+        "earningsCallTimestampEnd": 1793649600,
+        "isEarningsDateEstimate": false,
+        "trailingAnnualDividendRate": 1.05,
+        "trailingPE": 39.041096,
+        "trailingAnnualDividendYield": 0.0030615814,
+        "dividendYield": 0.32,
+        "epsTrailingTwelveMonths": 8.76,
+        "epsForward": 9.57785,
+        "epsCurrentYear": 8.8313,
+        "priceEpsCurrentYear": 38.725895,
+        "sharesOutstanding": 14594180000,
+        "impliedSharesOutstanding": 14594180000,
+        "bookValue": 7.36,
+        "fiftyDayAverage": 324.4584,
+        "fiftyDayAverageChange": 17.541595,
+        "fiftyDayAverageChangePercent": 0.054064237,
+        "twoHundredDayAverage": 291.7716,
+        "twoHundredDayAverageChange": 50.228394,
+        "twoHundredDayAverageChangePercent": 0.1721497,
+        "marketCap": 4991209701376,
+        "forwardPE": 35.707386,
+        "priceToBook": 46.467392,
+        "sourceInterval": 15,
+        "exchangeDataDelayedBy": 15,
+        "averageAnalystRating": "2.2 - Buy",
+        "tradeable": false,
+        "cryptoTradeable": false,
+        "displayName": "Apple",
+        "symbol": "AAPL"
+      },
+      {
+        "language": "en-US",
+        "region": "US",
+        "quoteType": "EQUITY",
+        "typeDisp": "Equity",
+        "quoteSourceName": "Nasdaq Real Time Price",
+        "triggerable": true,
+        "customPriceAlertConfidence": "HIGH",
+        "currency": "USD",
+        "marketState": "POST",
+        "longName": "Tesla, Inc.",
+        "shortName": "Tesla, Inc.",
+        "corporateActions": [],
+        "postMarketTime": 1792104617,
+        "regularMarketTime": 1792094400,
+        "exchange": "NMS",
+        "messageBoardId": "finmb_27444752",
+        "exchangeTimezoneName": "America/New_York",
+        "exchangeTimezoneShortName": "EDT",
+        "gmtOffSetMilliseconds": -14400000,
+        "market": "us_market",
+        "esgPopulated": false,
+        "hasPrePostMarketData": true,
+        "firstTradeDateMilliseconds": 1277818200000,
+        "priceHint": 2,
+        "postMarketChangePercent": 0.066215165,
+        "postMarketPrice": 362.68,
+        "postMarketChange": 0.23999023,
+        "regularMarketChange": -4.720001,
+        "regularMarketChangePercent": -1.2855434,
+        "fulldayChange": -4.480011,
+        "fulldayChangePercent": -1.2201794,
+        "fulldayPrice": 362.68,
+        "regularMarketPrice": 362.44,
+        "regularMarketDayHigh": 363.75,
+        "regularMarketDayRange": "355.23 - 363.75",
+        "regularMarketDayLow": 355.23,
+        "regularMarketVolume": 26484292,
+        "regularMarketPreviousClose": 367.16,
+        "bid": 359.79,
+        "ask": 363.76,
+        "bidSize": 1,
+        "askSize": 2,
+        "fullExchangeName": "NasdaqGS",
+        "financialCurrency": "USD",
+        "regularMarketOpen": 360.58,
+        "averageDailyVolume3Month": 37327718,
+        "averageDailyVolume10Day": 31876170,
+        "fiftyTwoWeekLowChange": 65.06,
+        "fiftyTwoWeekLowChangePercent": 0.21877731,
+        "fiftyTwoWeekRange": "297.38 - 498.83",
+        "fiftyTwoWeekHighChange": -136.38998,
+        "fiftyTwoWeekHighChangePercent": -0.27341977,
+        "fiftyTwoWeekLow": 297.38,
+        "fiftyTwoWeekHigh": 498.83,
+        "fiftyTwoWeekChangePercent": -14.365017,
+        "earningsTimestamp": 1792612800,
+        "earningsTimestampStart": 1792612800,
+        "earningsTimestampEnd": 1792612800,
+        "earningsCallTimestampStart": 1792612800,
+        "earningsCallTimestampEnd": 1792612800,
+        "isEarningsDateEstimate": false,
+        "trailingAnnualDividendRate": 0.0,
+        "trailingPE": 341.92456,
+        "trailingAnnualDividendYield": 0.0,
+        "dividendYield": 0.0,
+        "epsTrailingTwelveMonths": 1.06,
+        "epsForward": 2.16841,
+        "epsCurrentYear": 1.74386,
+        "priceEpsCurrentYear": 207.83778,
+        "sharesOutstanding": 3949547394,
+        "impliedSharesOutstanding": 3949547394,
+        "bookValue": 21.995,
+        "fiftyDayAverage": 357.9406,
+        "fiftyDayAverageChange": 4.4993896,
+        "fiftyDayAverageChangePercent": 0.012570213,
+        "twoHundredDayAverage": 388.9759,
+        "twoHundredDayAverageChange": -26.535889,
+        "twoHundredDayAverageChangePercent": -0.06821988,
+        "marketCap": 1431474012160,
+        "forwardPE": 167.14551,
+        "priceToBook": 16.47829,
+        "sourceInterval": 15,
+        "exchangeDataDelayedBy": 15,
+        "averageAnalystRating": "2.4 - Buy",
+        "tradeable": false,
+        "cryptoTradeable": false,
+        "displayName": "Tesla",
+        "symbol": "TSLA"
+      },
+      {
+        "language": "en-US",
+        "region": "US",
+        "quoteType": "EQUITY",
+        "typeDisp": "Equity",
+        "quoteSourceName": "Nasdaq Real Time Price",
+        "triggerable": true,
+        "customPriceAlertConfidence": "HIGH",
+        "currency": "USD",
+        "marketState": "POST",
+        "longName": "NVIDIA Corporation",
+        "shortName": "NVIDIA Corporation",
+        "corporateActions": [],
+        "postMarketTime": 1792104619,
+        "regularMarketTime": 1792094400,
+        "exchange": "NMS",
+        "messageBoardId": "finmb_32307",
+        "exchangeTimezoneName": "America/New_York",
+        "exchangeTimezoneShortName": "EDT",
+        "gmtOffSetMilliseconds": -14400000,
+        "market": "us_market",
+        "esgPopulated": false,
+        "hasPrePostMarketData": true,
+        "firstTradeDateMilliseconds": 917015400000,
+        "priceHint": 2,
+        "postMarketChangePercent": 0.086686336,
+        "postMarketPrice": 217.4183,
+        "postMarketChange": 0.18830872,
+        "regularMarketChange": -4.0700073,
+        "regularMarketChangePercent": -1.8391358,
+        "fulldayChange": -3.8816986,
+        "fulldayChangePercent": -1.7540436,
+        "fulldayPrice": 217.4183,
+        "regularMarketPrice": 217.23,
+        "regularMarketDayHigh": 218.4692,
+        "regularMarketDayRange": "212.85 - 218.4692",
+        "regularMarketDayLow": 212.85,
+        "regularMarketVolume": 126396690,
+        "regularMarketPreviousClose": 221.3,
+        "bid": 213.0,
+        "ask": 217.62,
+        "bidSize": 6,
+        "askSize": 2,
+        "fullExchangeName": "NasdaqGS",
+        "financialCurrency": "USD",
+        "regularMarketOpen": 215.34,
+        "averageDailyVolume3Month": 118784690,
+        "averageDailyVolume10Day": 101972420,
+        "fiftyTwoWeekLowChange": 52.95999,
+        "fiftyTwoWeekLowChangePercent": 0.32239598,
+        "fiftyTwoWeekRange": "164.27 - 243.37",
+        "fiftyTwoWeekHighChange": -26.14,
+        "fiftyTwoWeekHighChangePercent": -0.10740847,
+        "fiftyTwoWeekLow": 164.27,
+        "fiftyTwoWeekHigh": 243.37,
+        "fiftyTwoWeekChangePercent": 21.720482,
+        "dividendDate": 1790812800,
+        "earningsTimestamp": 1794945600,
+        "earningsTimestampStart": 1794945600,
+        "earningsTimestampEnd": 1794945600,
+        "earningsCallTimestampStart": 1787778000,
+        "earningsCallTimestampEnd": 1787778000,
+        "isEarningsDateEstimate": false,
+        "trailingAnnualDividendRate": 0.28,
+        "trailingPE": 28.359009,
+        "trailingAnnualDividendYield": 0.0012652507,
+        "dividendYield": 0.44,
+        "epsTrailingTwelveMonths": 7.66,
+        "epsForward": 15.9146,
+        "epsCurrentYear": 9.31242,
+        "priceEpsCurrentYear": 23.326912,
+        "sharesOutstanding": 24147000000,
+        "impliedSharesOutstanding": 24147000000,
+        "bookValue": 9.483,
+        "fiftyDayAverage": 223.2136,
+        "fiftyDayAverageChange": -5.983597,
+        "fiftyDayAverageChangePercent": -0.026806597,
+        "twoHundredDayAverage": 202.693,
+        "twoHundredDayAverageChange": 14.537003,
+        "twoHundredDayAverageChangePercent": 0.07171931,
+        "marketCap": 5245452681216,
+        "forwardPE": 13.64973,
+        "priceToBook": 22.907309,
+        "sourceInterval": 15,
+        "exchangeDataDelayedBy": 15,
+        "prevName": "Usual Stablecoin",
+        "nameChangeDate": "2026-10-15",
+        "averageAnalystRating": "1.3 - Strong Buy",
+        "tradeable": false,
+        "cryptoTradeable": false,
+        "displayName": "NVIDIA",
+        "symbol": "NVDA"
+      }
+    ],
+    "error": null
+  }
+}
+
+--- STDERR ---
+(empty)
+--- EXIT ---
+0
+
+========== COMMAND 4 ==========
+python3 << 'PY'
+import json, urllib.request, ssl, http.cookiejar, datetime, math
+
+ctx = ssl.create_default_context()
+cj = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPSHandler(context=ctx))
+UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Accept": "application/json"}
+
+def fetch(url):
+    req = urllib.request.Request(url, headers=UA)
+    with opener.open(req, timeout=25) as r:
+        return r.read()
+
+print("=== timestamps ===")
+for label, ts in [
+    ("now_utc_approx", None),
+    ("AAPL_regular", 1792094401),
+    ("AAPL_post", 1792104635),
+    ("AAPL_earn", 1793649600),
+    ("TSLA_regular", 1792094400),
+    ("TSLA_post", 1792104617),
+    ("TSLA_earn", 1792612800),
+    ("NVDA_regular", 1792094400),
+    ("NVDA_post", 1792104619),
+    ("NVDA_earn", 1794945600),
+    ("NVDA_earn_call_start", 1787778000),
+    ("AAPL_div", 1786579200),
+    ("NVDA_div", 1790812800),
+]:
+    if ts is None:
+        print("utcnow", datetime.datetime.utcnow().isoformat()+"Z")
+        ny = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-4)))
+        print("America/New_York approx EDT", ny.isoformat())
+        continue
+    utc = datetime.datetime.utcfromtimestamp(ts)
+    ny = datetime.datetime.fromtimestamp(ts, datetime.timezone(datetime.timedelta(hours=-4)))
+    print(f"{label}: utc={utc.isoformat()}Z  EDT={ny.strftime('%Y-%m-%d %H:%M:%S %Z')}  weekday={utc.strftime('%A')}")
+
+# crumb
+crumb = fetch("https://query1.finance.yahoo.com/v1/test/getcrumb").decode()
+print("crumb", crumb)
+
+# chart 1y daily for RSI / MA / gap
+for sym in ["AAPL", "TSLA", "NVDA"]:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=1y&interval=1d&includePrePost=false"
+    print(f"\n=== CHART {sym} ===")
+    try:
+        raw = fetch(url)
+        data = json.loads(raw)
+        result = data["chart"]["result"][0]
+        meta = result["meta"]
+        ts = result["timestamp"]
+        q = result["indicators"]["quote"][0]
+        close = q["close"]
+        high = q["high"]
+        low = q["low"]
+        vol = q["volume"]
+        opn = q["open"]
+        # last 5 bars
+        print("meta.regularMarketPrice", meta.get("regularMarketPrice"))
+        print("meta.chartPreviousClose", meta.get("chartPreviousClose"))
+        print("meta.previousClose", meta.get("previousClose"))
+        print("last_bars:")
+        for i in range(-6, 0):
+            t = datetime.datetime.utcfromtimestamp(ts[i]).strftime("%Y-%m-%d")
+            print(f"  {t} o={opn[i]:.4f} h={high[i]:.4f} l={low[i]:.4f} c={close[i]:.4f} v={vol[i]}")
+        # RSI 14 on last close
+        closes = [c for c in close if c is not None]
+        def rsi(values, period=14):
+            if len(values) < period+1:
+                return None
+            deltas = [values[i]-values[i-1] for i in range(1, len(values))]
+            gains = [max(d,0) for d in deltas]
+            losses = [max(-d,0) for d in deltas]
+            avg_gain = sum(gains[:period]) / period
+            avg_loss = sum(losses[:period]) / period
+            for i in range(period, len(deltas)):
+                avg_gain = (avg_gain*(period-1) + gains[i]) / period
+                avg_loss = (avg_loss*(period-1) + losses[i]) / period
+            if avg_loss == 0:
+                return 100.0
+            rs = avg_gain / avg_loss
+            return 100 - (100 / (1+rs))
+        r = rsi(closes)
+        print(f"RSI14={r:.2f}" if r is not None else "RSI14=None")
+        # SMA 50/200
+        sma50 = sum(closes[-50:]) / 50 if len(closes) >= 50 else None
+        sma200 = sum(closes[-200:]) / 200 if len(closes) >= 200 else None
+        print(f"SMA50={sma50:.4f}" if sma50 else "SMA50=None", f"SMA200={sma200:.4f}" if sma200 else "SMA200=None")
+        # golden cross check: did 50 cross above 200 recently?
+        if len(closes) >= 210:
+            def sma(n, end):
+                return sum(closes[end-n:end]) / n
+            # last 10 days of 50 vs 200
+            print("MA50 vs MA200 last 8 days:")
+            for k in range(-8, 0):
+                end = len(closes)+k+1
+                s50 = sma(50, end)
+                s200 = sma(200, end)
+                print(f"  day {k}: sma50={s50:.3f} sma200={s200:.3f} {'GOLD' if s50>s200 else 'DEAD'}")
+        # gap vs previous close
+        if len(closes) >= 2 and opn[-1] is not None and close[-2] is not None:
+            gap = (opn[-1] - close[-2]) / close[-2] * 100
+            print(f"today_gap_open_vs_prev_close={gap:.4f}%  open={opn[-1]} prev_close={close[-2]}")
+    except Exception as e:
+        print("CHART ERROR", type(e).__name__, e)
+PY
+
+--- STDOUT ---
+=== timestamps ===
+utcnow 2026-10-15T22:50:58.444920Z
+America/New_York approx EDT 2026-10-15T18:50:58.444943-04:00
+AAPL_regular: utc=2026-10-15T20:00:01Z  EDT=2026-10-15 16:00:01 UTC-04:00  weekday=Thursday
+AAPL_post: utc=2026-10-15T22:50:35Z  EDT=2026-10-15 18:50:35 UTC-04:00  weekday=Thursday
+AAPL_earn: utc=2026-11-02T20:00:00Z  EDT=2026-11-02 16:00:00 UTC-04:00  weekday=Monday
+TSLA_regular: utc=2026-10-15T20:00:00Z  EDT=2026-10-15 16:00:00 UTC-04:00  weekday=Thursday
+TSLA_post: utc=2026-10-15T22:50:17Z  EDT=2026-10-15 18:50:17 UTC-04:00  weekday=Thursday
+TSLA_earn: utc=2026-10-21T20:00:00Z  EDT=2026-10-21 16:00:00 UTC-04:00  weekday=Wednesday
+NVDA_regular: utc=2026-10-15T20:00:00Z  EDT=2026-10-15 16:00:00 UTC-04:00  weekday=Thursday
+NVDA_post: utc=2026-10-15T22:50:19Z  EDT=2026-10-15 18:50:19 UTC-04:00  weekday=Thursday
+NVDA_earn: utc=2026-11-17T20:00:00Z  EDT=2026-11-17 16:00:00 UTC-04:00  weekday=Tuesday
+NVDA_earn_call_start: utc=2026-08-26T21:00:00Z  EDT=2026-08-26 17:00:00 UTC-04:00  weekday=Wednesday
+AAPL_div: utc=2026-08-13T00:00:00Z  EDT=2026-08-12 20:00:00 UTC-04:00  weekday=Thursday
+NVDA_div: utc=2026-10-01T00:00:00Z  EDT=2026-09-30 20:00:00 UTC-04:00  weekday=Thursday
+
+--- STDERR ---
+<stdin>:30: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+<stdin>:34: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+Traceback (most recent call last):
+  File "<stdin>", line 39, in <module>
+  File "<stdin>", line 10, in fetch
+  File "/usr/lib/python3.12/urllib/request.py", line 521, in open
+    response = meth(req, response)
+               ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 630, in http_response
+    response = self.parent.error(
+               ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 559, in error
+    return self._call_chain(*args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 492, in _call_chain
+    result = func(*args)
+             ^^^^^^^^^^^
+  File "/usr/lib/python3.12/urllib/request.py", line 639, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 406: Not Acceptable
+--- EXIT ---
+1
+
+========== COMMAND 5 ==========
+python3 << 'PY'
+import json, urllib.request, ssl, http.cookiejar, datetime
+
+ctx = ssl.create_default_context()
+cj = http.cookiejar.CookieJar()
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj), urllib.request.HTTPSHandler(context=ctx))
+UA = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Accept": "application/json,text/plain,*/*"}
+
+def fetch(url):
+    req = urllib.request.Request(url, headers=UA)
+    with opener.open(req, timeout=25) as r:
+        return r.getcode(), r.read()
+
+# seed cookie
+try:
+    fetch("https://fc.yahoo.com")
+except Exception as e:
+    print("fc.yahoo.com", type(e).__name__, e)
+
+code, crumb_b = fetch("https://query1.finance.yahoo.com/v1/test/getcrumb")
+crumb = crumb_b.decode()
+print("crumb HTTP", code, crumb)
+
+for sym in ["AAPL", "TSLA", "NVDA"]:
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range=1y&interval=1d&includePrePost=false"
+    print(f"\n=== CHART {sym} ===")
+    try:
+        code, raw = fetch(url)
+        print("HTTP", code, "bytes", len(raw))
+        data = json.loads(raw)
+        result = data["chart"]["result"][0]
+        meta = result["meta"]
+        ts = result["timestamp"]
+        q = result["indicators"]["quote"][0]
+        close = q["close"]
+        high = q["high"]
+        low = q["low"]
+        vol = q["volume"]
+        opn = q["open"]
+        print("regularMarketPrice", meta.get("regularMarketPrice"), "previousClose", meta.get("previousClose"), "chartPreviousClose", meta.get("chartPreviousClose"))
+        print("last_bars:")
+        for i in range(-6, 0):
+            t = datetime.datetime.fromtimestamp(ts[i], datetime.timezone.utc).strftime("%Y-%m-%d")
+            print(f"  {t} o={opn[i]:.4f} h={high[i]:.4f} l={low[i]:.4f} c={close[i]:.4f} v={vol[i]}")
+        closes = [c for c in close if c is not None]
+        def rsi(values, period=14):
+            if len(values) < period+1:
+                return None
+            deltas = [values[i]-values[i-1] for i in range(1, len(values))]
+            gains = [max(d,0) for d in deltas]
+            losses = [max(-d,0) for d in deltas]
+            avg_gain = sum(gains[:period]) / period
+            avg_loss = sum(losses[:period]) / period
+            for i in range(period, len(deltas)):
+                avg_gain = (avg_gain*(period-1) + gains[i]) / period
+                avg_loss = (avg_loss*(period-1) + losses[i]) / period
+            if avg_loss == 0:
+                return 100.0
+            rs = avg_gain / avg_loss
+            return 100 - (100 / (1+rs))
+        r = rsi(closes)
+        print(f"RSI14={r:.2f}" if r is not None else "RSI14=None")
+        sma50 = sum(closes[-50:]) / 50 if len(closes) >= 50 else None
+        sma200 = sum(closes[-200:]) / 200 if len(closes) >= 200 else None
+        print(f"SMA50={sma50:.4f}" if sma50 else "SMA50=None", f"SMA200={sma200:.4f}" if sma200 else "SMA200=None")
+        if len(closes) >= 210:
+            def sma(n, end):
+                return sum(closes[end-n:end]) / n
+            print("MA50 vs MA200 last 8 days:")
+            for k in range(-8, 0):
+                end = len(closes)+k+1
+                s50 = sma(50, end)
+                s200 = sma(200, end)
+                print(f"  day {k}: sma50={s50:.3f} sma200={s200:.3f} {'GOLD' if s50>s200 else 'DEAD'}")
+        if len(closes) >= 2 and opn[-1] is not None and close[-2] is not None:
+            gap = (opn[-1] - close[-2]) / close[-2] * 100
+            print(f"today_gap_open_vs_prev_close={gap:.4f}%  open={opn[-1]} prev_close={close[-2]}")
+        print("n_closes", len(closes))
+    except Exception as e:
+        print("CHART ERROR", type(e).__name__, e)
+PY
+
+--- STDOUT ---
+fc.yahoo.com HTTPError HTTP Error 404: Not Found on Accelerator
+crumb HTTP 200 8PM6ZQHRt.K
+
+=== CHART AAPL ===
+HTTP 200 bytes 28235
+regularMarketPrice 342.0 previousClose None chartPreviousClose 249.34
+last_bars:
+  2026-10-08 o=336.8200 h=341.5700 l=335.9000 c=340.4200 v=35332400
+  2026-10-09 o=331.7000 h=338.6100 l=330.7000 c=336.6400 v=37881200
+  2026-10-12 o=338.2200 h=342.6300 l=337.6000 c=340.9700 v=25900600
+  2026-10-13 o=344.6700 h=348.1500 l=340.7400 c=341.2700 v=38983800
+  2026-10-14 o=344.6100 h=347.0900 l=341.7200 c=342.9600 v=50061100
+  2026-10-15 o=346.9500 h=347.8500 l=341.6000 c=342.0000 v=39605715
+RSI14=60.58
+SMA50=325.0784 SMA200=292.1128
+MA50 vs MA200 last 8 days:
+  day -8: sma50=322.348 sma200=289.759 GOLD
+  day -7: sma50=322.280 sma200=290.081 GOLD
+  day -6: sma50=322.324 sma200=290.415 GOLD
+  day -5: sma50=322.389 sma200=290.743 GOLD
+  day -4: sma50=323.030 sma200=291.086 GOLD
+  day -3: sma50=323.787 sma200=291.424 GOLD
+  day -2: sma50=324.458 sma200=291.772 GOLD
+  day -1: sma50=325.078 sma200=292.113 GOLD
+today_gap_open_vs_prev_close=1.1634%  open=346.95001220703125 prev_close=342.9599914550781
+n_closes 251
+
+=== CHART TSLA ===
+HTTP 200 bytes 27873
+regularMarketPrice 362.44 previousClose None chartPreviousClose 435.15
+last_bars:
+  2026-10-08 o=374.1200 h=375.9600 l=368.0300 c=375.0000 v=28394900
+  2026-10-09 o=382.3800 h=388.5600 l=379.7100 c=382.7000 v=38952400
+  2026-10-12 o=382.6100 h=382.7000 l=377.5800 c=378.0300 v=20244300
+  2026-10-13 o=372.3300 h=377.0500 l=371.3000 c=375.2300 v=18393000
+  2026-10-14 o=371.1600 h=371.3900 l=363.8200 c=367.1600 v=31001400
+  2026-10-15 o=360.5800 h=363.7500 l=355.2300 c=362.4400 v=26484292
+RSI14=46.45
+SMA50=358.7584 SMA200=388.4899
+MA50 vs MA200 last 8 days:
+  day -8: sma50=350.327 sma200=392.193 DEAD
+  day -7: sma50=351.734 sma200=391.666 DEAD
+  day -6: sma50=353.268 sma200=391.135 DEAD
+  day -5: sma50=354.745 sma200=390.605 DEAD
+  day -4: sma50=356.081 sma200=390.067 DEAD
+  day -3: sma50=357.144 sma200=389.516 DEAD
+  day -2: sma50=357.941 sma200=388.976 DEAD
+  day -1: sma50=358.758 sma200=388.490 DEAD
+today_gap_open_vs_prev_close=-1.7921%  open=360.5799865722656 prev_close=367.1600036621094
+n_closes 251
+
+=== CHART NVDA ===
+HTTP 200 bytes 28904
+regularMarketPrice 217.23 previousClose None chartPreviousClose 179.83
+last_bars:
+  2026-10-08 o=234.9200 h=237.0700 l=229.8500 c=230.4800 v=118697400
+  2026-10-09 o=233.8400 h=233.9200 l=229.1100 c=229.2800 v=84645600
+  2026-10-12 o=228.7300 h=228.8600 l=224.9000 c=226.3200 v=70690300
+  2026-10-13 o=224.3400 h=228.6400 l=223.0600 c=228.5200 v=84036900
+  2026-10-14 o=225.5300 h=226.0000 l=219.6400 c=221.3000 v=118730100
+  2026-10-15 o=215.3400 h=218.4692 l=212.8500 c=217.2300 v=126396690
+RSI14=40.17
+SMA50=223.1738 SMA200=202.8381
+MA50 vs MA200 last 8 days:
+  day -8: sma50=219.774 sma200=201.362 GOLD
+  day -7: sma50=220.583 sma200=201.679 GOLD
+  day -6: sma50=221.393 sma200=201.926 GOLD
+  day -5: sma50=222.077 sma200=202.154 GOLD
+  day -4: sma50=222.589 sma200=202.340 GOLD
+  day -3: sma50=223.026 sma200=202.539 GOLD
+  day -2: sma50=223.214 sma200=202.693 GOLD
+  day -1: sma50=223.174 sma200=202.838 GOLD
+today_gap_open_vs_prev_close=-2.6932%  open=215.33999633789062 prev_close=221.3000030517578
+n_closes 251
+
+--- STDERR ---
+(empty)
+--- EXIT ---
+0
+
+========== COMMAND 6 ==========
+mkdir -p /tmp/demo-without/answers
+python3 -c "import os; print('answers exists', os.path.isdir('/tmp/demo-without/answers'))"
+
+--- STDOUT ---
+answers exists True
+
+--- STDERR ---
+(empty)
+--- EXIT ---
+0

@@ -1,0 +1,49 @@
+# cwd: /tmp/demo-with
+# All commands below were run with live data (no --fixture).
+
+$ python3 .agents/skills/price-alerts/scripts/market_calendar.py
+exit=0
+stdout:
+2026-10-15 18:51 EDT session=after trading_day=True
+stderr:
+(empty)
+
+$ python3 .agents/skills/price-alerts/scripts/brief.py --watchlist /tmp/demo-with/watchlist.json --kind close
+exit=0
+stdout:
+# Watchlist close brief - Thu Oct 15, 2026 06:51 PM ET
+
+| Ticker | Price | Chg | RSI14 | Trend | To stop | To target 1 |
+|---|---|---|---|---|---|---|
+| AAPL | $342.00 | -0.28% | 61 | up (50>200) | +38.6% | -26.9% |
+| TSLA | $362.44 | -1.29% | 46 | down (50<200) | - | - |
+| NVDA | $217.23 | -1.84% | 40 | up (50>200) | +35.6% | -12.5% |
+| SPY | $771.79 | +0.28% | 52 | up (50>200) | - | - |
+
+**Biggest movers:** NVDA -1.8%, TSLA -1.3%, SPY +0.3%
+**Earnings dates:** TSLA (2026-10-21), AAPL (2026-11-02), NVDA (2026-11-17)
+
+_Data: yahoo-chart. Informational only - not financial advice._
+stderr:
+(empty)
+
+$ python3 .agents/skills/price-alerts/scripts/alerts.py --watchlist /tmp/demo-with/watchlist.json --dry-run --format json
+exit=0
+stdout:
+{
+  "session": "after",
+  "skipped": false,
+  "alerts": [],
+  "errors": [],
+  "stale": [],
+  "last_close": true
+}
+stderr:
+(empty)
+
+$ mkdir -p /tmp/demo-with/answers
+exit=0
+stdout:
+(empty)
+stderr:
+(empty)

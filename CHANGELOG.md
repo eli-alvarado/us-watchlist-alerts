@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **With vs. without demo** (`docs/demo/`): live 2026-10-15 after-hours transcripts (Cursor Grok 4.6). Unedited. The without-skill agent did fine on quotes and the NYSE calendar; the skill’s edge is persist + session labeling + evaluating the rest of the book.
+
 ## 0.3.2 — 2026-10-15
 
 First-run friction: install, after-hours, earnings/IV.

@@ -1,0 +1,57 @@
+# cwd: /tmp/demo-with
+
+$ python3 .agents/skills/price-alerts/scripts/market_calendar.py
+exit: 0
+stdout:
+2026-10-15 18:51 EDT session=after trading_day=True
+stderr:
+(empty)
+
+$ python3 - <<'PY'
+import datetime as dt
+import sys
+sys.path.insert(0, ".agents/skills/price-alerts/scripts")
+import market_calendar as mc
+
+d = dt.date(2026, 11, 27)
+print("date=", d.isoformat())
+print("weekday=", d.strftime("%A"))
+print("is_trading_day=", mc.is_trading_day(d))
+print("holiday_name=", mc.holiday_name(d))
+print("early_closes_2026=", sorted(mc.early_closes(2026)))
+print("in_early_closes=", d in mc.early_closes(2026))
+print("thanksgiving_2026=", mc._nth_weekday(2026, 11, 3, 4))
+print("nyse_holidays_nov=", {k.isoformat(): v for k, v in mc.nyse_holidays(2026).items() if k.month == 11})
+# session during regular hours on that day
+for hh, mm in [(9, 30), (12, 59), (13, 0), (13, 1), (16, 0)]:
+    now = dt.datetime(2026, 11, 27, hh, mm, tzinfo=mc.ET)
+    print(f"session_at_{hh:02d}:{mm:02d}_ET=", mc.session(now))
+print("next_trading_day=", mc.next_trading_day(d))
+print("next_trading_day_from_thanksgiving=", mc.next_trading_day(dt.date(2026, 11, 26)))
+PY
+exit: 0
+stdout:
+date= 2026-11-27
+weekday= Friday
+is_trading_day= True
+holiday_name= None
+early_closes_2026= [datetime.date(2026, 11, 27), datetime.date(2026, 12, 24)]
+in_early_closes= True
+thanksgiving_2026= 2026-11-26
+nyse_holidays_nov= {'2026-11-26': 'Thanksgiving Day'}
+session_at_09:30_ET= regular
+session_at_12:59_ET= regular
+session_at_13:00_ET= after
+session_at_13:01_ET= after
+session_at_16:00_ET= after
+next_trading_day= 2026-11-30
+next_trading_day_from_thanksgiving= 2026-11-27
+stderr:
+(empty)
+
+$ mkdir -p /tmp/demo-with/answers
+exit: 0
+stdout:
+(empty)
+stderr:
+(empty)
