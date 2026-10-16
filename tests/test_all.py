@@ -295,6 +295,18 @@ class Brief(unittest.TestCase):
         self.assertIn("| AAPL |", out); self.assertIn("Biggest movers", out); self.assertIn("not financial advice", out)
         self.assertIn("Earnings dates:", out)
         self.assertIn("Data: fixture", out)
+    def test_json_fixture_snapshot(self):
+        snapshot = os.path.join(ROOT, "tests", "fixtures", "brief-morning.json")
+        stdout = io.StringIO()
+        with open(snapshot, encoding="utf-8") as f:
+            expected = json.load(f)
+        with mock.patch.object(mc, "refresh_official_calendar"), mock.patch("sys.stdout", stdout):
+            result = brief.main([
+                "--watchlist", WL, "--fixture", FX, "--kind", "morning",
+                "--now", "2026-10-15T08:30:00-04:00", "--format", "json",
+            ])
+        self.assertEqual(result, 0)
+        self.assertEqual(json.loads(stdout.getvalue()), expected)
     def test_closed_day_note(self):
         out = brief.render(wlm.load(WL), quotes(), "morning", T("2026-11-26T08:30"))
         self.assertIn("Market closed", out)

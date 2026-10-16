@@ -1,0 +1,56 @@
+{
+  "earnings": [
+    {
+      "date": "2026-10-16",
+      "symbol": "TSLA"
+    },
+    {
+      "date": "2026-10-29",
+      "symbol": "AAPL"
+    }
+  ],
+  "movers": [
+    {
+      "change_pct": -5.9980334316617565,
+      "symbol": "TSLA"
+    },
+    {
+      "change_pct": 1.7570471495386117,
+      "symbol": "AAPL"
+    },
+    {
+      "change_pct": 1.3126491646778145,
+      "symbol": "NVDA"
+    }
+  ],
+  "source": "fixture",
+  "tickers": [
+    {
+      "change_pct": 1.7570471495386117,
+      "price": 241.5,
+      "rsi14": 73.06267346066953,
+      "symbol": "AAPL",
+      "to_stop_pct": 13.043478260869565,
+      "to_target_1_pct": 3.5196687370600417,
+      "trend": "up (50>200)"
+    },
+    {
+      "change_pct": -5.9980334316617565,
+      "price": 210.32,
+      "rsi14": 28.755080711793255,
+      "symbol": "TSLA",
+      "to_stop_pct": null,
+      "to_target_1_pct": null,
+      "trend": "down (50<200)"
+    },
+    {
+      "change_pct": 1.3126491646778145,
+      "price": 169.8,
+      "rsi14": 98.81448369237692,
+      "symbol": "NVDA",
+      "to_stop_pct": 17.55005889281508,
+      "to_target_1_pct": 11.896348645465245,
+      "trend": "up (50>200)"
+    }
+  ]
+}

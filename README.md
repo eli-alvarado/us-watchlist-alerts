@@ -151,6 +151,8 @@ WATCHLIST_NOTIFY_FILE=/tmp/alerts.jsonl python3 scripts/alerts.py \
   --now 2026-10-15T18:30:00-04:00 --state /tmp/wl-state.json --notify file
 python3 scripts/brief.py --watchlist tests/fixtures/watchlist.json \
   --fixture tests/fixtures/quotes.json --kind close --now 2026-10-15T16:15:00-04:00
+python3 scripts/brief.py --watchlist tests/fixtures/watchlist.json \
+  --fixture tests/fixtures/quotes.json --kind morning --now 2026-10-15T08:30:00-04:00 --format json
 ```
 
 ## Example output
@@ -212,6 +214,8 @@ NVDA  $217.23  −1.84%                         earnings 2026-11-17 (yahoo-calen
 
 _Data: fixture. Informational only - not financial advice._
 ```
+
+Use `--format json` to get the same ticker rows, biggest movers, earnings dates, and quote source as a machine-readable object.
 
 "To stop" is remaining cushion (positive = room left). Live runs label the data source (`yahoo-chart`, `yfinance`, …) instead of `fixture`.
 

@@ -1,14 +1,14 @@
-"""Render a markdown watchlist brief (morning or close).
+"""Render a markdown or JSON watchlist brief (morning or close).
 
-python scripts/brief.py --watchlist watchlist.json --kind morning|close [--fixture f.json]
+python scripts/brief.py --watchlist watchlist.json --kind morning|close [--fixture f.json] [--format markdown|json]
 """
 from __future__ import annotations
-import argparse, datetime as dt, os, sys
+import argparse, datetime as dt, json, os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 import indicators as ind, market_calendar as mc, quotes as qt, watchlist as wlm
 
 
-def row(t, q):
+def row_data(t, q):
     p, pc = q["price"], q.get("prev_close")
     chg = (p - pc) / pc * 100 if pc else 0
     closes = (q.get("closes") or [])[:-1] + [p]
@@ -24,10 +24,61 @@ def row(t, q):
     tg = (t.get("targets") or [None])[0]
     if tg:
         to_go = (p - tg) / p * 100 if side == "short" else (tg - p) / p * 100
-        to_t = f"{to_go:+.1f}%"
+        to_target = to_go
     else:
-        to_t = "-"
-    return f"| {t['symbol']} | ${p:,.2f} | {chg:+.2f}% | {'-' if r is None else f'{r:.0f}'} | {trend} | {dist} | {to_t} |", chg
+        to_target = None
+    return {
+        "symbol": t["symbol"], "price": p, "change_pct": chg,
+        "rsi14": r, "trend": trend,
+        "to_stop_pct": cushion if stop else None,
+        "to_target_1_pct": to_target,
+    }
+
+
+def row(t, q):
+    data = row_data(t, q)
+    rsi = "-" if data["rsi14"] is None else f'{data["rsi14"]:.0f}'
+    stop = "-" if data["to_stop_pct"] is None else f'{data["to_stop_pct"]:+.1f}%'
+    target = "-" if data["to_target_1_pct"] is None else f'{data["to_target_1_pct"]:+.1f}%'
+    return (f"| {data['symbol']} | ${data['price']:,.2f} | {data['change_pct']:+.2f}% | "
+            f"{rsi} | {data['trend']} | {stop} | {target} |"), data["change_pct"]
+
+
+def render_json(wl, quotes, kind, now):
+    """Return the machine-readable counterpart to the markdown brief."""
+    today = now.astimezone(mc.ET).date()
+    tickers = []
+    sources = set()
+    movers = []
+    for ticker in wl["tickers"]:
+        quote = quotes.get(ticker["symbol"])
+        if not quote or "error" in quote:
+            continue
+        if quote.get("source"):
+            sources.add(quote["source"])
+        data = row_data(ticker, quote)
+        tickers.append(data)
+        movers.append((abs(data["change_pct"]), data["symbol"], data["change_pct"]))
+    movers.sort(reverse=True)
+
+    earnings = []
+    for symbol, quote in quotes.items():
+        if not quote or quote.get("error") or not quote.get("earnings_date"):
+            continue
+        try:
+            day = dt.date.fromisoformat(str(quote["earnings_date"])[:10])
+        except ValueError:
+            continue
+        if day >= today:
+            earnings.append((day, symbol))
+    earnings.sort()
+
+    return {
+        "tickers": tickers,
+        "movers": [{"symbol": symbol, "change_pct": change} for _, symbol, change in movers[:3]],
+        "earnings": [{"symbol": symbol, "date": day.isoformat()} for day, symbol in earnings],
+        "source": ", ".join(sorted(sources)) if sources else "unknown",
+    }
 
 
 def render(wl, quotes, kind, now):
@@ -84,6 +135,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(); ap.add_argument("--watchlist", default=wlm.DEFAULT_PATH)
     ap.add_argument("--kind", default="morning", choices=["morning", "close"]); ap.add_argument("--fixture")
     ap.add_argument("--provider", default="auto"); ap.add_argument("--now")
+    ap.add_argument("--format", choices=["markdown", "json"], default="markdown")
     a = ap.parse_args(argv)
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
     if now.tzinfo is None:
@@ -99,7 +151,10 @@ def main(argv=None):
     for t in wl["tickers"]:
         try: quotes[t["symbol"]] = qt.get_quote(t["symbol"], a.provider, a.fixture)
         except Exception as e: quotes[t["symbol"]] = {"error": str(e)}
-    print(render(wl, quotes, a.kind, now))
+    if a.format == "json":
+        print(json.dumps(render_json(wl, quotes, a.kind, now), indent=2, sort_keys=True))
+    else:
+        print(render(wl, quotes, a.kind, now))
     return 0
 
 
