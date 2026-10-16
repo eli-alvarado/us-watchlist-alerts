@@ -2,7 +2,7 @@ import copy, datetime as dt, importlib.util, io, json, os, sys, tempfile, unitte
 from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
-import alerts, brief, indicators as ind, market_calendar as mc, notify, quotes as qt, schedule as sched, watchlist as wlm
+import alerts, brief, chart, indicators as ind, market_calendar as mc, notify, quotes as qt, schedule as sched, watchlist as wlm
 
 FX = os.path.join(ROOT, "tests", "fixtures", "quotes.json")
 WL = os.path.join(ROOT, "tests", "fixtures", "watchlist.json")
@@ -325,6 +325,80 @@ class Brief(unittest.TestCase):
         line, _ = brief.row(t, q)
         # stop is above price for a short → positive cushion
         self.assertIn("+3.5%", line)
+
+
+class Chart(unittest.TestCase):
+    def test_sparkline_empty_and_range(self):
+        self.assertEqual(chart.sparkline([]), "")
+        self.assertEqual(chart.sparkline([None, None]), "")
+        s = chart.sparkline([1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertTrue(s)
+        self.assertEqual(s[0], "▁")
+        self.assertEqual(s[-1], "█")
+
+    def test_sma_series_length(self):
+        closes = list(range(1, 31))
+        series = chart.sma_series(closes, 20)
+        self.assertEqual(len(series), 30)
+        self.assertIsNone(series[18])
+        self.assertAlmostEqual(series[19], sum(range(1, 21)) / 20)
+        self.assertEqual(chart.sma_series(closes, 0), [None] * 30)
+
+    def test_levels_from_fixture_watchlist(self):
+        levels = {lab: px for lab, px in chart.levels_from_watchlist(wlm.load(WL), "AAPL")}
+        self.assertAlmostEqual(levels["stop"], 210.0)
+        self.assertAlmostEqual(levels["entry"], 225.0)
+        self.assertAlmostEqual(levels["target1"], 250.0)
+        self.assertAlmostEqual(levels["target2"], 270.0)
+        self.assertAlmostEqual(levels["price_above"], 240.0)
+        self.assertEqual(chart.levels_from_watchlist(wlm.load(WL), "MISSING"), [])
+
+    def test_ascii_chart_overlays(self):
+        text = chart.ascii_chart(
+            [200, 210, 220, 230, 240],
+            levels=[("stop", 210), ("price_above", 240)],
+            smas={"sma20": [None, None, None, None, 220]},
+            title="AAPL",
+        )
+        self.assertIn("AAPL", text)
+        self.assertIn("*", text)
+        self.assertIn("stop $210.00", text)
+        self.assertIn("price_above $240.00", text)
+        self.assertIn("sma20=.", text)
+
+    def test_cli_fixture(self):
+        stdout = io.StringIO()
+        with mock.patch("sys.stdout", stdout):
+            rc = chart.main(["AAPL", "--fixture", FX, "--watchlist", WL, "--sma", "20,50"])
+        self.assertEqual(rc, 0)
+        out = stdout.getvalue()
+        self.assertIn("AAPL", out)
+        self.assertIn("$241.50", out)
+        self.assertIn("stop $210.00", out)
+        self.assertIn("price_above $240.00", out)
+
+    def test_png_or_ascii_fallback(self):
+        with tempfile.TemporaryDirectory() as d:
+            dest = os.path.join(d, "aapl.png")
+            result = chart.render("AAPL", fixture=FX, watchlist=WL, style="line", out=dest)
+            self.assertTrue(result["path"] and os.path.exists(result["path"]))
+            self.assertGreater(os.path.getsize(result["path"]), 0)
+            if chart.has_matplotlib():
+                self.assertEqual(result["backend"], "matplotlib")
+                with open(result["path"], "rb") as f:
+                    self.assertEqual(f.read()[:8], b"\x89PNG\r\n\x1a\n")
+            else:
+                self.assertEqual(result["backend"], "ascii")
+                self.assertTrue(result["path"].endswith(".txt"))
+
+    def test_candle_style_offline(self):
+        result = chart.render("AAPL", fixture=FX, watchlist=WL, style="candle")
+        self.assertEqual(result["backend"], "ascii")
+        self.assertIn("AAPL", result["text"])
+        bars = chart.ohlc_bars({"closes": [10.0, 12.0, 11.0]})
+        self.assertEqual(bars[0], (10.0, 10.0, 10.0, 10.0))
+        self.assertEqual(bars[1][0], 10.0)
+        self.assertEqual(bars[1][3], 12.0)
 
 
 class Quotes(unittest.TestCase):
@@ -904,7 +978,7 @@ class SkillBundle(unittest.TestCase):
     def test_skill_scripts_match_root(self):
         names = ("alerts.py", "brief.py", "quotes.py", "watchlist.py",
                  "market_calendar.py", "notify.py", "indicators.py", "quickstart.py",
-                 "schedule.py")
+                 "schedule.py", "chart.py")
         root = os.path.join(ROOT, "scripts")
         for skill in ("price-alerts", "watchlist-brief", "watchlist-manager"):
             dest = os.path.join(ROOT, "skills", skill, "scripts")
