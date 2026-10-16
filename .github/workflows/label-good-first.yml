@@ -1,0 +1,31 @@
+name: Label starter issues
+
+# The create-issue token cannot attach labels (403). This job uses the
+# Actions GITHUB_TOKEN (issues: write) to mark the starter issues and
+# close the permission-probe leftover.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/label-good-first.yml"
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply good first issue label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for n in 10 11 12 13 14; do
+            gh issue edit "$n" --repo "$GITHUB_REPOSITORY" --add-label "good first issue"
+          done
+          gh issue close 15 --repo "$GITHUB_REPOSITORY" --reason "not planned" \
+            --comment "Permission probe from the installer bot (can create issues, cannot label/close). Closing." \
+            || true
