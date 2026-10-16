@@ -170,6 +170,27 @@ def should_deliver(res, dry_run=False):
     return (not dry_run) and (not (res or {}).get("skipped")) and bool((res or {}).get("alerts"))
 
 
+def sink_config_errors(spec=None):
+    """Env/binary gaps for the requested sinks. Empty list means ready to send."""
+    known, unknown = parse_sinks(spec)
+    errs = [f"unknown sink {u}" for u in unknown]
+    if not known:
+        errs.append("no sinks configured (set WATCHLIST_NOTIFY=ntfy and NTFY_TOPIC=your-topic)")
+        return errs
+    for s in known:
+        if s == "ntfy" and not _ntfy_endpoint():
+            errs.append("ntfy: set NTFY_TOPIC (optional NTFY_URL / NTFY_TOKEN)")
+        elif s == "slack" and not (os.environ.get("SLACK_WEBHOOK_URL") or "").strip():
+            errs.append("slack: set SLACK_WEBHOOK_URL")
+        elif s == "webhook" and not (os.environ.get("WATCHLIST_WEBHOOK_URL") or "").strip():
+            errs.append("webhook: set WATCHLIST_WEBHOOK_URL")
+        elif s == "file" and not (os.environ.get("WATCHLIST_NOTIFY_FILE") or "").strip():
+            errs.append("file: set WATCHLIST_NOTIFY_FILE")
+        elif s == "desktop" and not shutil.which("notify-send"):
+            errs.append("desktop: notify-send not found (Linux only)")
+    return errs
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sinks", default="env", help="comma-separated sinks, or 'env' for WATCHLIST_NOTIFY")

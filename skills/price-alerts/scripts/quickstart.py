@@ -3,6 +3,7 @@
 
   python3 scripts/quickstart.py           # offline fixture (labeled, not live)
   python3 scripts/quickstart.py --live    # live Yahoo quote + last-close alerts
+  python3 scripts/quickstart.py schedule  # weekday cron / Task Scheduler (see schedule.py)
 
 Creates ``watchlist.json`` from the bundled example if it is missing.
 Run it from the skill folder (next to SKILL.md) or from a clone of this repo.
@@ -17,6 +18,10 @@ ROOT = os.path.dirname(HERE)  # skill folder or repo root
 
 
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "schedule":
+        import schedule as sched
+        return sched.main(argv[1:])
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--live", action="store_true", help="hit Yahoo instead of the bundled fixture")
     ap.add_argument("--file", default=os.path.join(ROOT, "watchlist.json"))

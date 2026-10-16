@@ -6,7 +6,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILLS = ("price-alerts", "watchlist-brief", "watchlist-manager")
 PY_FILES = ("alerts.py", "brief.py", "indicators.py", "market_calendar.py",
             "notify.py", "quotes.py", "watchlist.py", "bundle_skills.py",
-            "quickstart.py")
+            "quickstart.py", "schedule.py")
 
 
 def bundle():

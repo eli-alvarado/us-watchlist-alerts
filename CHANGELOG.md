@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Always-on weekday alerts:** `python3 scripts/schedule.py` (or `python3 scripts/quickstart.py schedule`) installs cron every 5 minutes Mon–Fri on macOS/Linux, or prints a Task Scheduler command on Windows. `--dry-run` / `uninstall`. Requires a notify sink and sends one test ping. `alerts.py` still stays silent on holidays and empty checks. GitHub Actions option: `examples/alerts-cron.yml` on a private fork — not this public sample.
 - Windows: `pip install tzdata` is documented in Quick start, Install, FAQ, and CONTRIBUTING. `market_calendar.py` still raises that hint on `ZoneInfoNotFoundError`. Not a Linux CI / `requirements.txt` dependency.
 - `examples/watchlist.yaml` `extra_closures` is `[]` again. 2026-11-04 is a regular NYSE session; copying that sample would have muted alerts that day.
 - **Live snapshot never writes `main`.** `.github/workflows/live.yml` publishes dated `docs/live/YYYY-MM-DD.md` to the [`live-snapshots`](https://github.com/eli-alvarado/us-watchlist-alerts/tree/live-snapshots/docs/live) branch and the job summary. `scripts/publish_live_snapshot.sh` refuses `main` / `master` / the remote default. The 2026-10-15 file that github-actions[bot] pushed to main (`b236a62`) was the violation this closes. CI and label-good-first do not push.

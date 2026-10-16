@@ -27,6 +27,22 @@ flowchart LR
 
 You own the list. The scripts fetch a quote, evaluate only **new** conditions, and stay quiet when nothing changed — including after the bell and on Saturday.
 
+## Get alerts on your phone, even with your agent closed
+
+A Claude/Cursor session only runs while it is open. For always-on NYSE-hours checks on a machine that stays on:
+
+```bash
+export WATCHLIST_NOTIFY=ntfy
+export NTFY_TOPIC=my-watchlist          # install the ntfy app and subscribe to this topic
+python3 scripts/schedule.py             # or: python3 scripts/quickstart.py schedule
+```
+
+That installs a **weekday** cron job (every 5 minutes, Mon–Fri). `alerts.py` already stays silent on NYSE holidays, weekends, and empty checks, so off-hours ticks do not ping you. `--dry-run` prints the job without installing or sending a test ping. `python3 scripts/schedule.py uninstall` removes it. On Windows the same command **prints** a Task Scheduler line (it does not create the task).
+
+No always-on computer? In a **private fork**, copy [`examples/alerts-cron.yml`](examples/alerts-cron.yml) to `.github/workflows/alerts.yml` and set `NTFY_TOPIC` (or Slack/webhook) as Actions secrets. Do **not** put notify secrets on this public repo — [`.github/workflows/live.yml`](.github/workflows/live.yml) is a no-secrets public snapshot, not your phone.
+
+Never places trades.
+
 ## FAQ
 
 **What does it cost?** Free. No API key for the default Yahoo chart path. Optional Alpaca / Finnhub / Alpha Vantage keys are only if you want those feeds.
@@ -81,7 +97,7 @@ On a **single** question, a capable agent without the skill is fine — live pri
 | [`watchlist-brief`](skills/watchlist-brief/SKILL.md) | Morning or close summary: table, movers, distance to stop/target, upcoming earnings |
 | [`HEARTBEAT.md`](HEARTBEAT.md) | Checklist for a scheduled check that stays silent unless something new happens |
 
-Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation + `init`), `brief.py`, `market_calendar.py`, `indicators.py`, `quickstart.py` (offline fixture demo after install).
+Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation + `init`), `brief.py`, `market_calendar.py`, `indicators.py`, `quickstart.py` (offline fixture demo after install), `schedule.py` (weekday cron / Task Scheduler for always-on checks).
 
 ## Quick start
 
@@ -281,11 +297,13 @@ Load the three `SKILL.md` files as instructions, give the agent shell access to 
 
 This repo also runs a **public sample** on weekdays via `.github/workflows/live.yml` — session-aware, no secrets. Every run writes the job summary. Dated files go to the [`live-snapshots`](https://github.com/eli-alvarado/us-watchlist-alerts/tree/live-snapshots/docs/live) branch (**never `main`**), at most one per ET weekday. Index: [docs/live/](docs/live/).
 
-Run the HEARTBEAT checklist every 15–30 min during market hours, or use cron (times in ET):
+One-command always-on: `python3 scripts/schedule.py` (see [Get alerts on your phone](#get-alerts-on-your-phone-even-with-your-agent-closed)). That is weekday cron every 5 minutes plus a notify sink. HEARTBEAT.md is the same loop if an agent session is open.
+
+Manual cron (times in ET) if you would rather write the lines yourself:
 
 ```cron
 CRON_TZ=America/New_York
-*/15 9-16 * * 1-5  cd ~/us-watchlist-alerts && python3 scripts/alerts.py >> alerts.log
+*/5 * * * 1-5      cd ~/us-watchlist-alerts && python3 scripts/alerts.py --notify >> alerts.log
 45 8 * * 1-5       cd ~/us-watchlist-alerts && python3 scripts/brief.py --kind morning
 10 16 * * 1-5      cd ~/us-watchlist-alerts && python3 scripts/brief.py --kind close
 ```

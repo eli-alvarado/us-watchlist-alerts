@@ -3,6 +3,8 @@
 Run this checklist on every scheduled tick (suggested: every 15-30 min, 09:30-16:00 ET, plus 08:45 ET morning brief and 16:10 ET close brief).
 Stay **silent** unless there is something new. Never place or modify orders.
 
+No agent session? `python3 scripts/schedule.py` installs weekday cron every 5 minutes (`--notify`); `alerts.py` still skips holidays and empty checks. Uninstall with `python3 scripts/schedule.py uninstall`. GitHub Actions option: `examples/alerts-cron.yml` on a private fork.
+
 1. **Session gate** - `python3 scripts/market_calendar.py`.
    - Weekend / full-day holiday: do nothing, reply nothing. Exception: if a brief is scheduled for this tick on a holiday, send one line: "Market closed today (<holiday>), next session <date>."
    - `pre` / `after` / overnight on a **trading day**: `alerts.py` evaluates last regular close and sets `last_close`. Mention that in the message. Do not require `--force-session`.

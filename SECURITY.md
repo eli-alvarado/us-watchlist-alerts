@@ -33,6 +33,8 @@ Paper or live Alpaca keys still do **not** enable order entry in this repo. Ther
 
 `WATCHLIST_NOTIFY=webhook,slack,ntfy,desktop,file` only delivers **new** alerts. A webhook URL is a credential. Prefer a dedicated ntfy topic or Slack incoming webhook, not a shared channel with write-up rights. Sink failures print `WARN notify …` and do not abort the check.
 
+`python3 scripts/schedule.py` writes notify env into a local `.env` (gitignored) so weekday cron can source it. Do not commit that file. The public `live.yml` workflow must stay secret-free; personal GitHub Actions alerts belong in a private fork using `examples/alerts-cron.yml`.
+
 ## What the scripts send outbound
 
 On `provider=auto` with no keys: HTTPS to unofficial Yahoo chart / quote / options hosts, and sometimes Nasdaq earnings-date. With keys: Alpaca, Finnhub, or Alpha Vantage as documented in [docs/LIMITATIONS.md](docs/LIMITATIONS.md). User-Agent is `us-watchlist-alerts/<version>`.

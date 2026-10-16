@@ -2,7 +2,7 @@ import copy, datetime as dt, importlib.util, io, json, os, sys, tempfile, unitte
 from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
-import alerts, brief, indicators as ind, market_calendar as mc, notify, quotes as qt, watchlist as wlm
+import alerts, brief, indicators as ind, market_calendar as mc, notify, quotes as qt, schedule as sched, watchlist as wlm
 
 FX = os.path.join(ROOT, "tests", "fixtures", "quotes.json")
 WL = os.path.join(ROOT, "tests", "fixtures", "watchlist.json")
@@ -780,6 +780,17 @@ class Notify(unittest.TestCase):
         self.assertFalse(notify.should_deliver({**self.res, "skipped": True}))
         self.assertFalse(notify.should_deliver({**self.res, "alerts": []}))
 
+    def test_sink_config_errors(self):
+        with mock.patch.object(notify.os, "environ", {"WATCHLIST_NOTIFY": ""}):
+            errs = notify.sink_config_errors()
+        self.assertTrue(any("no sinks" in e for e in errs))
+        with mock.patch.object(notify.os, "environ", {"WATCHLIST_NOTIFY": "ntfy"}):
+            errs = notify.sink_config_errors()
+        self.assertTrue(any(e.startswith("ntfy:") for e in errs))
+        with mock.patch.object(notify.os, "environ",
+                               {"WATCHLIST_NOTIFY": "file", "WATCHLIST_NOTIFY_FILE": "/tmp/x.jsonl"}):
+            self.assertEqual(notify.sink_config_errors(), [])
+
 
 class IvAndRangeAlerts(unittest.TestCase):
     def test_iv_above_latch_and_rearm(self):
@@ -880,7 +891,8 @@ class IvAndRangeAlerts(unittest.TestCase):
 class SkillBundle(unittest.TestCase):
     def test_skill_scripts_match_root(self):
         names = ("alerts.py", "brief.py", "quotes.py", "watchlist.py",
-                 "market_calendar.py", "notify.py", "indicators.py", "quickstart.py")
+                 "market_calendar.py", "notify.py", "indicators.py", "quickstart.py",
+                 "schedule.py")
         root = os.path.join(ROOT, "scripts")
         for skill in ("price-alerts", "watchlist-brief", "watchlist-manager"):
             dest = os.path.join(ROOT, "skills", skill, "scripts")
@@ -1081,6 +1093,86 @@ class LiveSnapshot(unittest.TestCase):
                       git(["ls-tree", "-r", "--name-only", "origin/live-snapshots"]).stdout)
         shutil.rmtree(d, ignore_errors=True)
         shutil.rmtree(remote, ignore_errors=True)
+
+
+class Schedule(unittest.TestCase):
+    def test_cron_block_roundtrip(self):
+        job = sched.cron_job_line("/tmp/repo", "/usr/bin/python3")
+        self.assertTrue(job.startswith("*/5 * * * 1-5 "))
+        self.assertIn("scripts/alerts.py --notify", job)
+        existing = "MAILTO=me\n0 8 * * * echo hi\n"
+        merged = sched.merge_crontab(existing, root="/tmp/repo", python="/usr/bin/python3")
+        self.assertIn(sched.BEGIN, merged)
+        self.assertIn(job, merged)
+        self.assertIn("MAILTO=me", merged)
+        gone = sched.merge_crontab(merged, uninstall=True)
+        self.assertNotIn(sched.BEGIN, gone)
+        self.assertNotIn("alerts.py", gone)
+        self.assertIn("MAILTO=me", gone)
+
+    def test_windows_prints_schtasks(self):
+        cmd = sched.windows_task_cmd("/c/repo", "python.exe")
+        self.assertIn("schtasks /Create", cmd)
+        self.assertIn("MINUTE /MO 5", cmd)
+        self.assertIn("alerts.py --notify", cmd)
+        self.assertIn("schtasks /Delete", sched.windows_task_cmd(uninstall=True))
+
+    def test_dry_run_does_not_write_crontab_or_ping(self):
+        env = {"WATCHLIST_NOTIFY": "file", "WATCHLIST_NOTIFY_FILE": "/tmp/x.jsonl"}
+        with mock.patch.dict(os.environ, env, clear=False), \
+             mock.patch.object(sched, "write_crontab") as w, \
+             mock.patch.object(sched, "send_test_ping") as ping:
+            rc, lines = sched.run(action="install", dry_run=True, platform="linux",
+                                  root="/tmp/repo", python="python3")
+        self.assertEqual(rc, 0)
+        w.assert_not_called()
+        ping.assert_not_called()
+        self.assertTrue(any("Dry-run" in x for x in lines))
+        self.assertTrue(any("*/5 * * * 1-5" in x for x in lines))
+
+    def test_missing_notify_exits_2(self):
+        with mock.patch.object(notify.os, "environ", {}), \
+             mock.patch.object(sched.os, "environ", {}):
+            rc, lines = sched.run(action="install", dry_run=True, platform="linux")
+        self.assertEqual(rc, 2)
+        self.assertTrue(any("Notify is not ready" in x for x in lines))
+
+    def test_install_writes_crontab_and_test_ping(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "n.jsonl")
+        env = {"WATCHLIST_NOTIFY": "file", "WATCHLIST_NOTIFY_FILE": path}
+        written = []
+        with mock.patch.dict(os.environ, env, clear=False), \
+             mock.patch.object(sched, "read_crontab", return_value=""), \
+             mock.patch.object(sched, "write_crontab", side_effect=lambda t: written.append(t)), \
+             mock.patch.object(sched.shutil, "which", return_value="/usr/bin/crontab"), \
+             mock.patch.object(sched, "DOTENV", os.path.join(d, ".env")):
+            rc, lines = sched.run(action="install", dry_run=False, platform="linux",
+                                  root=d, python="python3")
+        self.assertEqual(rc, 0, lines)
+        self.assertTrue(written)
+        self.assertIn("*/5 * * * 1-5", written[0])
+        self.assertTrue(os.path.exists(path) and os.path.getsize(path) > 0)
+        self.assertTrue(any("Test ping ok" in x for x in lines))
+
+    def test_windows_dry_run_prints_task(self):
+        env = {"WATCHLIST_NOTIFY": "file", "WATCHLIST_NOTIFY_FILE": "/tmp/x.jsonl"}
+        with mock.patch.dict(os.environ, env, clear=False), \
+             mock.patch.object(sched, "write_crontab") as w, \
+             mock.patch.object(sched, "send_test_ping") as ping:
+            rc, lines = sched.run(action="install", dry_run=True, platform="win32",
+                                  root="C:\\repo", python="python.exe")
+        self.assertEqual(rc, 0)
+        w.assert_not_called()
+        ping.assert_not_called()
+        self.assertTrue(any("schtasks /Create" in x for x in lines))
+
+    def test_quickstart_dispatches_schedule(self):
+        import quickstart as qs
+        with mock.patch.object(sched, "main", return_value=0) as m:
+            rc = qs.main(["schedule", "--dry-run"])
+        self.assertEqual(rc, 0)
+        m.assert_called_once_with(["--dry-run"])
 
 
 if __name__ == "__main__":
