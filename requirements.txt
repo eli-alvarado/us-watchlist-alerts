@@ -1,3 +1,4 @@
 # All scripts run on the Python 3.10+ standard library (CI: 3.10–3.13). Optional extras:
 yfinance>=0.2   # richer data + earnings dates
 PyYAML>=6       # YAML watchlists
+# matplotlib>=3.8  # optional PNG charts (scripts/chart.py); ASCII fallback without it

@@ -21,6 +21,7 @@ Scripts use the Python 3.10+ standard library. Optional extras in `requirements.
 | Calendar / extra closures | `scripts/market_calendar.py` | Holiday, early-close, or `NYSE_EXTRA_CLOSURES` assertion |
 | Quote field / fallback | `scripts/quotes.py` | Mock `_get` or use `tests/fixtures/quotes.json` |
 | Schema | `scripts/watchlist.py` `validate`, `examples/` | Validation tests |
+| Chart | `scripts/chart.py` | Fixture ASCII / levels; PNG only if matplotlib is present |
 | Agent instructions | `skills/*/SKILL.md`, `HEARTBEAT.md` | Read them as the agent would; keep "no trades" language |
 
 `npx skills add` copies each `skills/<name>/` folder. After editing a root script or `data/holidays_overrides.json`, run `python3 scripts/bundle_skills.py` so the copies stay identical (CI asserts this). That bundle also ships `examples/quotes-fixture.json` and `scripts/quickstart.py`.

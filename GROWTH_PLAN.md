@@ -57,7 +57,7 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 
 - [x] CI on Python 3.10–3.13 (`python3 -m unittest discover -s tests`)
 - [x] CONTRIBUTING.md, issue templates, limitations doc
-- [x] CHANGELOG.md (0.1.0 … 0.4.1)
+- [x] CHANGELOG.md (0.1.0 … 0.5.0)
 - [x] GitHub release v0.2.0
 - [x] File 3–5 **good first issues** (see CONTRIBUTING.md) so the repo looks open, not a dump
 - [x] README FAQ: cost, never trades, privacy, delayed Yahoo, US listings only
@@ -94,9 +94,18 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 - [x] Scheduled weekday snapshot (`docs/live/` index on main; dated files on `live-snapshots`, never `main`)
 - [x] v0.4.1: after-hours aligned `prev_close` (null today-bar); live Action says weekday not daily
 - [x] README SEO lede
-- Email / Telegram sinks (need credentials + bounce/rate hygiene; ntfy covers many phones today)
+
+### v0.5 — charts (tagged 0.5.0)
+
+- [x] `scripts/chart.py`: stdlib ASCII sparkline / grid; optional matplotlib PNG; SMA overlays; watchlist alert levels
+- [x] `brief.py --format json` (contributor #21)
+- [x] Always-on `schedule.py`; live snapshots off `main`; empty sample `extra_closures`; Windows tzdata docs
+
+### Later
+
 - IV rank / percentile only if a free source actually returns a history, not a synthetic from prices
 - Live NYSE status feed (calendar cache is not a substitute for "market halted")
 - Marketplace / awesome-list submissions from the list above
+- Email / Telegram sinks (need credentials + bounce/rate hygiene; ntfy covers many phones today)
 
 Out of scope on purpose: CANSLIM, DCF, options payoff, live order entry. Point at the comparison table instead of growing into a junk drawer.

@@ -94,10 +94,10 @@ On a **single** question, a capable agent without the skill is fine — live pri
 |---|---|
 | [`watchlist-manager`](skills/watchlist-manager/SKILL.md) | Add, remove, update, list and validate tickers with thesis, entry, targets, stop, tags and alert rules (JSON/YAML schema) |
 | [`price-alerts`](skills/price-alerts/SKILL.md) | 26 alert types, latching, cooldowns, once-per-day events, session gating, NYSE calendar, optional notify sinks |
-| [`watchlist-brief`](skills/watchlist-brief/SKILL.md) | Morning or close summary: table, movers, distance to stop/target, upcoming earnings |
+| [`watchlist-brief`](skills/watchlist-brief/SKILL.md) | Morning or close summary: table, movers, distance to stop/target, upcoming earnings; optional `chart.py` (ASCII / PNG) |
 | [`HEARTBEAT.md`](HEARTBEAT.md) | Checklist for a scheduled check that stays silent unless something new happens |
 
-Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation + `init`), `brief.py`, `market_calendar.py`, `indicators.py`, `quickstart.py` (offline fixture demo after install), `schedule.py` (weekday cron / Task Scheduler for always-on checks).
+Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation + `init`), `brief.py`, `chart.py` (ASCII sparkline / grid; PNG when matplotlib is installed), `market_calendar.py`, `indicators.py`, `quickstart.py` (offline fixture demo after install), `schedule.py` (weekday cron / Task Scheduler for always-on checks).
 
 ## Quick start
 
@@ -153,6 +153,8 @@ python3 scripts/brief.py --watchlist tests/fixtures/watchlist.json \
   --fixture tests/fixtures/quotes.json --kind close --now 2026-10-15T16:15:00-04:00
 python3 scripts/brief.py --watchlist tests/fixtures/watchlist.json \
   --fixture tests/fixtures/quotes.json --kind morning --now 2026-10-15T08:30:00-04:00 --format json
+python3 scripts/chart.py AAPL --watchlist tests/fixtures/watchlist.json \
+  --fixture tests/fixtures/quotes.json
 ```
 
 ## Example output
