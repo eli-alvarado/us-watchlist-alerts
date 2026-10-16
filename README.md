@@ -277,7 +277,7 @@ Load the three `SKILL.md` files as instructions, give the agent shell access to 
 
 ## Scheduling
 
-This repo also runs a **public sample** on weekdays ([docs/live/](docs/live/)) via `.github/workflows/live.yml` — session-aware, no secrets, at most one commit per ET weekday. Job summaries still update when a file for today already exists.
+This repo also runs a **public sample** on weekdays via `.github/workflows/live.yml` — session-aware, no secrets. Every run writes the job summary. Dated files go to the [`live-snapshots`](https://github.com/eli-alvarado/us-watchlist-alerts/tree/live-snapshots/docs/live) branch (**never `main`**), at most one per ET weekday. Index: [docs/live/](docs/live/).
 
 Run the HEARTBEAT checklist every 15–30 min during market hours, or use cron (times in ET):
 
@@ -375,7 +375,7 @@ Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 - Alpaca/Finnhub history depends on bars/candles succeeding; if those calls fail, MA/RSI/52-week rules will not fire even though the last price is present.
 - US-listed equities and ETFs only. No order routing. `notify-send` is Linux-only; use ntfy on macOS/Windows.
 
-Full write-up: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Changelog: [CHANGELOG.md](CHANGELOG.md). Keys and notify URLs: [SECURITY.md](SECURITY.md). Weekday public sample: [docs/live/](docs/live/).
+Full write-up: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Changelog: [CHANGELOG.md](CHANGELOG.md). Keys and notify URLs: [SECURITY.md](SECURITY.md). Weekday public sample: [docs/live/](docs/live/) (dated files on [`live-snapshots`](https://github.com/eli-alvarado/us-watchlist-alerts/tree/live-snapshots/docs/live)).
 
 ## Comparison
 

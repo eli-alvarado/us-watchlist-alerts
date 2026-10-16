@@ -31,7 +31,7 @@ Run from the repo root so `scripts/` imports resolve the same way the skills doc
 
 ## Pull requests
 
-1. Branch off `main`.
+1. Branch off `main`. **Never commit or push to `main` directly** — including GitHub Actions. The weekday live snapshot publishes dated files to `live-snapshots` and the job summary.
 2. Keep PRs focused. A calendar fix and a README rewrite can be separate.
 3. `python3 -m unittest discover -s tests` must pass. CI runs that command on Python 3.10–3.13.
 4. Do not add network calls to the default unittest suite.

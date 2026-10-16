@@ -1,9 +1,11 @@
 name: Live snapshot
 
-# Weekday public check. No secrets. At most one docs/live/YYYY-MM-DD.md per ET weekday.
+# Weekday public check. Never writes to main.
+# Job summary every run; dated files go to the live-snapshots branch only.
 on:
   schedule:
-    # 16:20 ET during EDT (UTC-4) and EST (UTC-5). Script no-ops if the file exists.
+    # 16:20 ET during EDT (UTC-4) and EST (UTC-5). Script no-ops if the file exists
+    # on live-snapshots (restored below before the Python run).
     - cron: "20 20 * * 1-5"
     - cron: "20 21 * * 1-5"
     # Morning peek so a failed close run still has a chance the same day.
@@ -11,11 +13,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write  # push live-snapshots only; publish script refuses main
 
 concurrency:
   group: live-snapshot
   cancel-in-progress: false
+
+env:
+  LIVE_BRANCH: live-snapshots
 
 jobs:
   snapshot:
@@ -23,18 +28,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: Restore today's file from live-snapshots if present
+        run: |
+          set -euo pipefail
+          git fetch origin "$LIVE_BRANCH" || true
+          day=$(TZ=America/New_York date +%F)
+          dest="docs/live/${day}.md"
+          if git show "origin/${LIVE_BRANCH}:${dest}" > /tmp/live-existing.md 2>/dev/null; then
+            mkdir -p docs/live
+            cp /tmp/live-existing.md "$dest"
+            echo "restored $dest from $LIVE_BRANCH"
+          fi
       - name: Run session-aware snapshot
         id: snap
         run: python3 scripts/live_snapshot.py --watchlist examples/live-watchlist.json --out docs/live
-      - name: Commit at most one file per ET day
+      - name: Publish to live-snapshots (never main)
         if: steps.snap.outputs.commit_path != ''
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add "${{ steps.snap.outputs.commit_path }}"
-          git diff --cached --quiet && exit 0
-          git commit -m "docs(live): weekday snapshot"
-          git push
+        run: bash scripts/publish_live_snapshot.sh "${{ steps.snap.outputs.commit_path }}"

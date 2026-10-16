@@ -996,6 +996,68 @@ class LiveSnapshot(unittest.TestCase):
         self.assertTrue(b["skipped"])
         self.assertEqual(b["reason"], "already")
 
+    def test_workflows_never_push_main(self):
+        """Owner rule: no workflow may commit or push the default branch."""
+        wf_dir = os.path.join(ROOT, ".github", "workflows")
+        for name in sorted(os.listdir(wf_dir)):
+            if not name.endswith((".yml", ".yaml")):
+                continue
+            with open(os.path.join(wf_dir, name), encoding="utf-8") as f:
+                text = f.read()
+            for i, line in enumerate(text.splitlines(), 1):
+                s = line.split("#", 1)[0].strip()
+                if not s:
+                    continue
+                self.assertNotEqual(s, "git push", f"{name}:{i} bare git push")
+                self.assertNotRegex(s, r"git\s+push\s+\S+\s+main\b", f"{name}:{i} {s}")
+                self.assertNotIn("HEAD:main", s, f"{name}:{i} {s}")
+                self.assertNotIn("HEAD:refs/heads/main", s, f"{name}:{i} {s}")
+        with open(os.path.join(wf_dir, "live.yml"), encoding="utf-8") as f:
+            live = f.read()
+        self.assertIn("live-snapshots", live)
+        self.assertIn("publish_live_snapshot.sh", live)
+        self.assertNotIn("git commit", live)
+
+    def test_publish_live_snapshot_refuses_main_and_uses_side_branch(self):
+        import shutil, subprocess
+        script = os.path.join(ROOT, "scripts", "publish_live_snapshot.sh")
+        d = tempfile.mkdtemp()
+        remote = tempfile.mkdtemp()
+        def git(args, cwd=d, check=True):
+            return subprocess.run(["git", "-C", cwd, *args], check=check,
+                                  capture_output=True, text=True)
+        git(["init", "--bare", "-b", "main"], cwd=remote)
+        git(["init", "-b", "main"])
+        git(["config", "user.email", "test@example.com"])
+        git(["config", "user.name", "test"])
+        os.makedirs(os.path.join(d, "docs", "live"), exist_ok=True)
+        with open(os.path.join(d, "docs", "live", "README.md"), "w") as f:
+            f.write("index\n")
+        git(["add", "docs/live/README.md"])
+        git(["commit", "-m", "seed"])
+        git(["remote", "add", "origin", remote])
+        git(["push", "-u", "origin", "main"])
+        git(["symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main"])
+        dest = os.path.join(d, "docs", "live", "2026-10-16.md")
+        with open(dest, "w") as f:
+            f.write("# snap\n")
+        env = {**os.environ, "LIVE_BRANCH": "main", "LIVE_REMOTE": "origin",
+               "GIT_AUTHOR_NAME": "bot", "GIT_AUTHOR_EMAIL": "bot@example.com"}
+        denied = subprocess.run(["bash", script, "docs/live/2026-10-16.md"],
+                                cwd=d, env=env, capture_output=True, text=True)
+        self.assertEqual(denied.returncode, 2, denied.stderr)
+        self.assertIn("refusing", denied.stderr)
+        env["LIVE_BRANCH"] = "live-snapshots"
+        ok = subprocess.run(["bash", script, "docs/live/2026-10-16.md"],
+                            cwd=d, env=env, capture_output=True, text=True)
+        self.assertEqual(ok.returncode, 0, ok.stderr + ok.stdout)
+        self.assertIn("live-snapshots", git(["ls-remote", "--heads", "origin"]).stdout)
+        self.assertNotIn("2026-10-16.md", git(["ls-tree", "-r", "--name-only", "origin/main"]).stdout)
+        self.assertIn("docs/live/2026-10-16.md",
+                      git(["ls-tree", "-r", "--name-only", "origin/live-snapshots"]).stdout)
+        shutil.rmtree(d, ignore_errors=True)
+        shutil.rmtree(remote, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()

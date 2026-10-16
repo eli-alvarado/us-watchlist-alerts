@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Session-aware weekday snapshot for the scheduled GitHub Action.
 
-Writes at most one ``docs/live/YYYY-MM-DD.md`` per ET weekday / trading day.
-Always appends the same markdown to ``$GITHUB_STEP_SUMMARY`` when set.
-Never commits secrets. Quote failures stay in the job summary (exit 0).
+Writes at most one ``docs/live/YYYY-MM-DD.md`` per ET weekday / trading day
+into ``--out``. The Action publishes that file to the ``live-snapshots``
+branch (never ``main``) and always appends the same markdown to
+``$GITHUB_STEP_SUMMARY`` when set. Never commits secrets. Quote failures
+stay in the job summary (exit 0).
 
   python3 scripts/live_snapshot.py --watchlist examples/live-watchlist.json --out docs/live
   python3 scripts/live_snapshot.py --now 2026-10-17T10:00:00-04:00   # Saturday skip

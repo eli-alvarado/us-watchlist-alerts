@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Live snapshot never writes `main`.** `.github/workflows/live.yml` publishes dated `docs/live/YYYY-MM-DD.md` to the [`live-snapshots`](https://github.com/eli-alvarado/us-watchlist-alerts/tree/live-snapshots/docs/live) branch and the job summary. `scripts/publish_live_snapshot.sh` refuses `main` / `master` / the remote default. The 2026-10-15 file that github-actions[bot] pushed to main (`b236a62`) was the violation this closes. CI and label-good-first do not push.
+
 ## 0.4.1 — 2026-10-16
 
 After-hours `prev_close` and weekday wording.

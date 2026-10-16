@@ -91,7 +91,7 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 
 - [x] Fresh-install test + `watchlist.py init` / `quickstart.py` / `--file` anywhere
 - [x] Hero GIF, How-it-works mermaid, FAQ, SECURITY.md
-- [x] Scheduled weekday snapshot (`docs/live/`, one commit per ET weekday, no secrets)
+- [x] Scheduled weekday snapshot (`docs/live/` index on main; dated files on `live-snapshots`, never `main`)
 - [x] v0.4.1: after-hours aligned `prev_close` (null today-bar); live Action says weekday not daily
 - [x] README SEO lede
 - Email / Telegram sinks (need credentials + bounce/rate hygiene; ntfy covers many phones today)

@@ -25,7 +25,7 @@ If you set them, they belong in the **environment** (or a local `.env` you do no
 | `WATCHLIST_WEBHOOK_URL` / `SLACK_WEBHOOK_URL` | Alert delivery |
 | `NTFY_TOPIC` / `NTFY_TOKEN` | Alert delivery |
 
-The scheduled [live snapshot](docs/live/) workflow uses **no secrets**. Do not add keys to that job.
+The scheduled [live snapshot](docs/live/) workflow uses **no secrets** and does **not** push to `main`. Dated files go to the `live-snapshots` branch. Do not add keys to that job.
 
 Paper or live Alpaca keys still do **not** enable order entry in this repo. There is no `submit_order` path. If you connect a broker skill from another project, these skills tell the agent to refuse unconfirmed orders.
 
