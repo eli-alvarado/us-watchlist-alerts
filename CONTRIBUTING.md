@@ -10,7 +10,7 @@ cd us-watchlist-alerts
 python3 -m unittest discover -s tests
 ```
 
-Scripts use the Python 3.10+ standard library. Optional extras in `requirements.txt` (`yfinance`, `PyYAML`) are not needed for CI.
+Scripts use the Python 3.10+ standard library. Optional extras in `requirements.txt` (`yfinance`, `PyYAML`) are not needed for CI. On Windows, `pip install tzdata` if `ZoneInfo("America/New_York")` raises `ZoneInfoNotFoundError`. `market_calendar.py` prints that hint. Do **not** add `tzdata` to Linux CI or as a hard `requirements.txt` dependency.
 
 ## How to change things
 
@@ -45,7 +45,6 @@ These are sized for a first PR. File one with the [good first issue template](.g
 - Add a `--format json` snapshot assertion for `brief.py` morning output against the existing fixtures.
 - Teach `from_yfinance` another calendar shape you have actually seen in the wild, with a mock in `tests/test_all.py`.
 - Expand `examples/watchlist.yaml` with a short + `extra_closures` example that still validates.
-- Windows notes: `zoneinfo` needs the `tzdata` package on some installs — `pip install tzdata`. `market_calendar.py` prints that hint on `ZoneInfoNotFoundError`. Do not add `tzdata` to Linux CI.
 
 ## Releases
 

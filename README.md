@@ -123,6 +123,8 @@ python3 scripts/quotes.py AAPL NVDA        # live
 python3 -m unittest discover -s tests      # offline, fixtures only
 ```
 
+On Windows, if that raises `ZoneInfoNotFoundError` for `America/New_York`, run `pip install tzdata`. Do not add `tzdata` to Linux CI or `requirements.txt`.
+
 After the bell you do **not** need `--force-session`. `alerts.py` evaluates the last regular close and prints `market closed, showing last regular close`. Weekends and full-day holidays stay silent (with the next session date).
 
 Offline demo (no network, same output as the GIF — after-hours last-close mode):
@@ -201,7 +203,7 @@ _Data: fixture. Informational only - not financial advice._
 
 ## Install per agent
 
-Python **3.10+** is tested in CI. Each skill folder includes `scripts/` (same files as the repo root). Use the **exact** `-a` line from [Quick start](#quick-start) — do not use bare `-y` for Claude Code.
+Python **3.10+** is tested in CI. Each skill folder includes `scripts/` (same files as the repo root). Use the **exact** `-a` line from [Quick start](#quick-start) — do not use bare `-y` for Claude Code. Windows only: `pip install tzdata` if `zoneinfo` cannot find `America/New_York`.
 
 ### Claude Code
 

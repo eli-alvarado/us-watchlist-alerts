@@ -50,6 +50,21 @@ class Calendar(unittest.TestCase):
             self.assertEqual(mc.next_trading_day(dt.date(2026, 10, 14)), dt.date(2026, 10, 16))
     def test_extra_closures_arg(self):
         self.assertFalse(mc.is_trading_day(dt.date(2026, 10, 15), extra=["2026-10-15"]))
+    def test_tzdata_documented_not_required(self):
+        """Windows extra is documented; Linux CI / requirements.txt stay stdlib-only."""
+        with open(os.path.join(ROOT, "README.md"), encoding="utf-8") as f:
+            readme = f.read()
+        with open(os.path.join(ROOT, "CONTRIBUTING.md"), encoding="utf-8") as f:
+            contrib = f.read()
+        with open(os.path.join(ROOT, "requirements.txt"), encoding="utf-8") as f:
+            req = f.read()
+        with open(os.path.join(ROOT, "scripts", "market_calendar.py"), encoding="utf-8") as f:
+            src = f.read()
+        for text, label in ((readme, "README"), (contrib, "CONTRIBUTING"), (src, "market_calendar.py")):
+            self.assertIn("pip install tzdata", text, label)
+        for line in req.splitlines():
+            s = line.split("#", 1)[0].strip()
+            self.assertFalse(s.startswith("tzdata"), line)
     def test_bundled_unscheduled_closures(self):
         carter = dt.date(2025, 1, 9)
         self.assertFalse(mc.is_trading_day(carter))
