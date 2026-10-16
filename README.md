@@ -39,6 +39,10 @@ You own the list. The scripts fetch a quote, evaluate only **new** conditions, a
 
 **Why did I get fewer alerts with the skill?** That is the point. Same distinct events, no duplicate pings — see [With vs. without](#with-vs-without-the-skill).
 
+**Claude Code install landed in `.agents/skills`?** You used bare `-y`. Use `-a claude-code` so it writes `.claude/skills/`. See [Quick start](#quick-start).
+
+**Windows: `ZoneInfoNotFoundError`?** `pip install tzdata`. Linux CI does not need it.
+
 ## With vs. without the skill
 
 **Same 3 important moves caught. 58 duplicate pings avoided.**
@@ -81,36 +85,41 @@ Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher wit
 
 ## Quick start
 
-One-line install that **ships the scripts** (no extra clone):
+Pick **one** installer line. Bare `-y` is **not** Claude Code — it writes `.agents/skills/` (Cursor / Codex). Claude Code needs `-a claude-code`.
+
+| Agent | Command (copy exactly) | Lands in |
+|---|---|---|
+| **Claude Code** | `npx skills add eli-alvarado/us-watchlist-alerts -y -a claude-code` | `.claude/skills/` |
+| **Cursor** | `npx skills add eli-alvarado/us-watchlist-alerts -y -a cursor` | `.agents/skills/` |
+| **Codex** | `npx skills add eli-alvarado/us-watchlist-alerts -y -a codex` | `.agents/skills/` |
+| **Gemini CLI** | `npx skills add eli-alvarado/us-watchlist-alerts -y -a gemini-cli` | `.agents/skills/` |
+| Every agent in this folder | `npx skills add eli-alvarado/us-watchlist-alerts --all` | `.agents/skills/` plus a `.claude/skills/` symlink |
+
+Then `cd` into **that** `price-alerts` folder (next to `SKILL.md`) and run the fixture demo — labeled, no keys:
 
 ```bash
-npx skills add eli-alvarado/us-watchlist-alerts -y
+cd .claude/skills/price-alerts          # Claude Code
+# cd .agents/skills/price-alerts        # Cursor / Codex / Gemini CLI
+python3 scripts/quickstart.py
+python3 scripts/quotes.py AAPL          # live Yahoo when you want it
 ```
 
-Default `-y` lands in `.agents/skills/` (Cursor and Codex). Claude Code:
+`quickstart.py` copies the bundled example (AAPL `price_above: 240`, sized for the **fixture**). On a live ~$342 print those levels fire once. For a live book with no leftover $240 rules:
 
 ```bash
-npx skills add eli-alvarado/us-watchlist-alerts -y -a claude-code
+python3 scripts/watchlist.py init --empty --file live.json
+python3 scripts/watchlist.py add AAPL --file live.json --alert pct_change_down:3
+python3 scripts/alerts.py --watchlist live.json
 ```
 
-Then `cd` into the skill folder (next to `SKILL.md`) and run the quickstart — **offline fixture**, labeled, no keys:
-
-```bash
-cd .agents/skills/price-alerts    # or .claude/skills/price-alerts
-python3 scripts/quickstart.py     # init watchlist + one fixture alert
-python3 scripts/quotes.py AAPL    # live Yahoo when you want it
-```
-
-`--file` on `watchlist.py` can sit before or after the subcommand (`add AAPL --file swing.json` works). If you run `alerts.py` with no `watchlist.json`, it now tells you to `python3 scripts/watchlist.py init` instead of printing a silent “no new alerts.”
+`--file` can sit before or after the subcommand. If `alerts.py` has no watchlist file, it tells you to run `init` instead of printing a silent “no new alerts.”
 
 Or clone the repo and use the same files at the root:
 
 ```bash
 git clone --depth 1 https://github.com/eli-alvarado/us-watchlist-alerts && cd us-watchlist-alerts
-cp examples/watchlist.json watchlist.json
-python3 scripts/quotes.py AAPL NVDA
-python3 scripts/alerts.py
-python3 scripts/brief.py --kind morning
+python3 scripts/quickstart.py              # fixture demo
+python3 scripts/quotes.py AAPL NVDA        # live
 python3 -m unittest discover -s tests      # offline, fixtures only
 ```
 
@@ -186,17 +195,11 @@ _Data: fixture. Informational only - not financial advice._
 
 "To stop" is remaining cushion (positive = room left). Live runs label the data source (`yahoo-chart`, `yfinance`, …) instead of `fixture`.
 
+**What does the bundled example do on live quotes?** It is a fixture-era book (AAPL above $240). A live AAPL ~$342 will fire those level alerts once. Use `init --empty` (above) for a clean live list.
+
 ## Install per agent
 
-Python **3.10+** is tested in CI. Each skill folder includes `scripts/` (same files as the repo root).
-
-Universal installer ([skills.sh](https://skills.sh)):
-
-```bash
-npx skills add eli-alvarado/us-watchlist-alerts -y
-```
-
-Pass `-a claude-code`, `-a cursor`, `-a copilot`, or `-a gemini-cli` to pick an agent path. Scripts land next to `SKILL.md` in that path.
+Python **3.10+** is tested in CI. Each skill folder includes `scripts/` (same files as the repo root). Use the **exact** `-a` line from [Quick start](#quick-start) — do not use bare `-y` for Claude Code.
 
 ### Claude Code
 
@@ -217,9 +220,13 @@ for s in watchlist-manager price-alerts watchlist-brief; do
 done
 ```
 
-For one project, use `.claude/skills/` instead. Then ask: `add NVDA to my watchlist with a stop at 140`.
+For one project, the installer line above already writes `.claude/skills/`. Then ask: `add NVDA to my watchlist with a stop at 140`.
 
 ### Codex CLI
+
+Project install (verified): `npx skills add eli-alvarado/us-watchlist-alerts -y -a codex` → `.agents/skills/`.
+
+User-wide symlink if you prefer `~/.codex/skills`:
 
 ```bash
 git clone https://github.com/eli-alvarado/us-watchlist-alerts ~/.codex/us-watchlist-alerts
@@ -233,7 +240,9 @@ Or point the project's `AGENTS.md` at `skills/*/SKILL.md` and run scripts from t
 
 ### Cursor
 
-Project (committed with the repo you work in):
+Project install (verified): `npx skills add eli-alvarado/us-watchlist-alerts -y -a cursor` → `.agents/skills/`.
+
+To also commit a `.cursor/skills/` copy in the repo you work in:
 
 ```bash
 mkdir -p .cursor/skills
@@ -245,6 +254,10 @@ done
 User-wide: the same loop into `~/.cursor/skills/`. Older Cursor versions can use a rule in `.cursor/rules/` that points at the `SKILL.md` files.
 
 ### Gemini CLI
+
+Project install (verified): `npx skills add eli-alvarado/us-watchlist-alerts -y -a gemini-cli` → `.agents/skills/`.
+
+User-wide symlink if you prefer `~/.gemini/skills`:
 
 ```bash
 git clone https://github.com/eli-alvarado/us-watchlist-alerts ~/.gemini/us-watchlist-alerts

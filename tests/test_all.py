@@ -859,6 +859,13 @@ class WatchlistCli(unittest.TestCase):
         self.assertGreaterEqual(len(wl["tickers"]), 1)
         self.assertEqual(wlm.main(["init", "--file", path]), 1)
 
+    def test_init_empty(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "live.json")
+        rc = wlm.main(["init", "--empty", "--file", path])
+        self.assertEqual(rc, 0)
+        self.assertEqual(wlm.load(path)["tickers"], [])
+
     def test_missing_watchlist_hint(self):
         msg = wlm.missing_watchlist_hint("nope.json")
         self.assertIn("watchlist.py init", msg)

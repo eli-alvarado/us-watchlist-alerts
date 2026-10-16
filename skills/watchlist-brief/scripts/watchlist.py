@@ -60,20 +60,21 @@ def missing_watchlist_hint(path):
     lines = [
         f"No watchlist at {path}.",
         "Create one:  python3 scripts/watchlist.py init",
+        "Empty live book: python3 scripts/watchlist.py init --empty",
     ]
     if ex:
         lines.append(f"Or pass:     --watchlist {ex}")
     return "\n".join(lines)
 
 
-def init_file(path=DEFAULT_PATH):
+def init_file(path=DEFAULT_PATH, empty=False):
     """Copy the bundled example (or write an empty valid list) if ``path`` is free."""
     if os.path.exists(path):
         raise FileExistsError(f"{path} already exists")
     parent = os.path.dirname(os.path.abspath(path))
     if parent:
         os.makedirs(parent, exist_ok=True)
-    src = bundled_example()
+    src = None if empty else bundled_example()
     if src:
         shutil.copy2(src, path)
         return path, "copied-example"
@@ -235,13 +236,15 @@ def main(argv=None):
     p = sp.add_parser("show"); p.add_argument("symbol")
     p = sp.add_parser("list"); p.add_argument("--tag")
     sp.add_parser("validate")
-    sp.add_parser("init")
+    p_init = sp.add_parser("init")
+    p_init.add_argument("--empty", action="store_true",
+                        help="write an empty valid watchlist (skip the fixture-era example book)")
     a = ap.parse_args(rest)
     if file_override:
         a.file = file_override
     if a.cmd == "init":
         try:
-            path, how = init_file(a.file)
+            path, how = init_file(a.file, empty=a.empty)
         except FileExistsError as e:
             print(e, file=sys.stderr); return 1
         print(f"wrote {path} ({how})")

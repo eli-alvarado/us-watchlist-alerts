@@ -12,9 +12,14 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-ET = ZoneInfo("America/New_York")
+try:
+    ET = ZoneInfo("America/New_York")
+except ZoneInfoNotFoundError as e:
+    raise RuntimeError(
+        "America/New_York timezone data is missing. On Windows run: pip install tzdata"
+    ) from e
 
 
 def _data_file(name):

@@ -9,4 +9,6 @@ A scheduled GitHub Action runs `examples/live-watchlist.json` on NYSE trading da
 
 Replayed / fixture runs for tests use `--fixture` and `--now` on `scripts/live_snapshot.py`.
 
+First successful live run: [2026-10-15.md](2026-10-15.md) (manual dispatch; Yahoo chart).
+
 Informational only. Not financial advice. Never places trades.

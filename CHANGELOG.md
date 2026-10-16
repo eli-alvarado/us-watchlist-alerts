@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- README install is per-agent and verified: Claude Code needs `-a claude-code` (`.claude/skills/`); Cursor / Codex / Gemini CLI use `-a cursor` / `-a codex` / `-a gemini-cli` (`.agents/skills/`). `--all` writes both. `watchlist.py init --empty` starts a live book so the fixture-era AAPL $240 example does not fire on a ~$342 print. Windows `tzdata` hint if `America/New_York` is missing.
+
 ## 0.4.0 — 2026-10-15
 
 Pre-launch hardening. Still no auto-trade.

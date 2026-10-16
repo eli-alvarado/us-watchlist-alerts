@@ -45,7 +45,7 @@ These are sized for a first PR. File one with the [good first issue template](.g
 - Add a `--format json` snapshot assertion for `brief.py` morning output against the existing fixtures.
 - Teach `from_yfinance` another calendar shape you have actually seen in the wild, with a mock in `tests/test_all.py`.
 - Expand `examples/watchlist.yaml` with a short + `extra_closures` example that still validates.
-- Windows notes: `zoneinfo` needs the `tzdata` package on some installs — document the exact pip extra without making it required on Linux CI.
+- Windows notes: `zoneinfo` needs the `tzdata` package on some installs — `pip install tzdata`. `market_calendar.py` prints that hint on `ZoneInfoNotFoundError`. Do not add `tzdata` to Linux CI.
 
 ## Releases
 
