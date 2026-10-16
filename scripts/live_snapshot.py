@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Session-aware daily snapshot for the scheduled GitHub Action.
+"""Session-aware weekday snapshot for the scheduled GitHub Action.
 
-Writes at most one ``docs/live/YYYY-MM-DD.md`` per ET trading day.
+Writes at most one ``docs/live/YYYY-MM-DD.md`` per ET weekday / trading day.
 Always appends the same markdown to ``$GITHUB_STEP_SUMMARY`` when set.
 Never commits secrets. Quote failures stay in the job summary (exit 0).
 
@@ -102,7 +102,7 @@ def run(watch, out_dir, now=None, fixture=None, force=False):
             existing = f.read()
         if summary:
             _write(summary, existing)
-        print(f"already have {dest} — one tidy update per day")
+        print(f"already have {dest} — one tidy update per weekday")
         _gh_output("commit_path", "")
         _gh_output("skipped", "already")
         return {"skipped": True, "reason": "already", "path": dest}

@@ -46,7 +46,7 @@ Prompt 3 is the user’s “tomorrow” wording. 2026-10-16 is a regular Friday,
 
 Animated cycle: [with-vs-without.gif](img/with-vs-without.gif)
 
-## Live prints both sides used (yahoo-chart, last regular close)
+## Live prints both sides used (~18:50 ET 2026-10-15, yahoo-chart, last vs Wed 2026-10-14)
 
 | Symbol | Last | Prev close | Day % |
 |---|---|---|---|

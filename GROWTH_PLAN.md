@@ -57,7 +57,7 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 
 - [x] CI on Python 3.10–3.13 (`python3 -m unittest discover -s tests`)
 - [x] CONTRIBUTING.md, issue templates, limitations doc
-- [x] CHANGELOG.md (0.1.0 … 0.4.0)
+- [x] CHANGELOG.md (0.1.0 … 0.4.1)
 - [x] GitHub release v0.2.0
 - [x] File 3–5 **good first issues** (see CONTRIBUTING.md) so the repo looks open, not a dump
 - [x] README FAQ: cost, never trades, privacy, delayed Yahoo, US listings only
@@ -91,7 +91,8 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 
 - [x] Fresh-install test + `watchlist.py init` / `quickstart.py` / `--file` anywhere
 - [x] Hero GIF, How-it-works mermaid, FAQ, SECURITY.md
-- [x] Scheduled market-day snapshot (`docs/live/`, one commit/day, no secrets)
+- [x] Scheduled weekday snapshot (`docs/live/`, one commit per ET weekday, no secrets)
+- [x] v0.4.1: after-hours aligned `prev_close` (null today-bar); live Action says weekday not daily
 - [x] README SEO lede
 - Email / Telegram sinks (need credentials + bounce/rate hygiene; ntfy covers many phones today)
 - IV rank / percentile only if a free source actually returns a history, not a synthetic from prices

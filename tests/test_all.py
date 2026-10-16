@@ -314,15 +314,16 @@ class Quotes(unittest.TestCase):
         self.assertIn("yahoo", order)
         self.assertNotIn("alpaca", order)
     def test_aligned_ohlcv_drops_null_closes(self):
-        closes, vols, opens, n = qt._aligned_ohlcv({
+        closes, vols, opens, n, ts = qt._aligned_ohlcv({
             "close": [1.0, None, 3.0],
             "volume": [10, 99, 30],
             "open": [0.9, 2.0, 2.9],
-        })
+        }, timestamps=[100, 200, 300])
         self.assertEqual(closes, [1.0, 3.0])
         self.assertEqual(vols, [10, 30])
         self.assertEqual(n, 3)
         self.assertEqual(opens, [0.9, 2.9])
+        self.assertEqual(ts, [100, 300])
     def test_yahoo_prefers_meta_previous_close(self):
         payload = {
             "chart": {"result": [{
@@ -372,6 +373,64 @@ class Quotes(unittest.TestCase):
         self.assertEqual(qt._chart_prev_close({"chartPreviousClose": 5}, [9, 10, 10.5], price=10.5), 10)
         self.assertEqual(qt._chart_prev_close({"chartPreviousClose": 5}, [9, 10], price=12), 10)
         self.assertEqual(qt._as_of_from_meta({}), None)
+
+    def test_chart_prev_close_trailing_null_today_bar(self):
+        """After ~20:00 ET Yahoo keeps today's timestamp with close=None.
+
+        Unaligned timestamps[-1] looked like 'today', so prev_close walked
+        back to Oct 13 ($228.52) instead of Wednesday Oct 14 ($221.30).
+        """
+        # 2026-10-13 / 14 / 15 09:30 ET
+        raw_ts = [1791898200, 1791984600, 1792071000]
+        now = dt.datetime(2026, 10, 15, 20, 9, tzinfo=dt.timezone(dt.timedelta(hours=-4)))
+        closes, _vols, _opens, _n, ts = qt._aligned_ohlcv(
+            {"close": [228.52, 221.30, None], "volume": [1, 2, 3], "open": [224, 225, 215]},
+            timestamps=raw_ts,
+        )
+        self.assertEqual(closes, [228.52, 221.30])
+        self.assertEqual(ts, [1791898200, 1791984600])
+        self.assertAlmostEqual(
+            qt._chart_prev_close({}, closes, timestamps=ts, price=217.23, now=now), 221.30
+        )
+        # last finished bar *is* today → prior session
+        self.assertAlmostEqual(
+            qt._chart_prev_close({}, [228.52, 221.30, 217.23], timestamps=raw_ts, price=217.23, now=now),
+            221.30,
+        )
+
+    def test_chart_prev_close_rejects_rolled_meta(self):
+        """previousClose == last after the session roll is a fake 0% day."""
+        now = dt.datetime(2026, 10, 15, 20, 21, tzinfo=dt.timezone(dt.timedelta(hours=-4)))
+        ts = [1791898200, 1791984600]
+        prev = qt._chart_prev_close(
+            {"previousClose": 217.23, "regularMarketPreviousClose": 217.23},
+            [228.52, 221.30], timestamps=ts, price=217.23, now=now,
+        )
+        self.assertAlmostEqual(prev, 221.30)
+
+    def test_yahoo_after_hours_null_today_bar(self):
+        """from_yahoo: 2026-10-15 20:09 ET shape — last 1d close is None."""
+        payload = {
+            "chart": {"result": [{
+                "meta": {
+                    "regularMarketPrice": 217.23,
+                    "chartPreviousClose": 230.48,
+                    "regularMarketOpen": 215.34,
+                    "regularMarketTime": 1792094401,
+                },
+                "timestamp": [1791898200, 1791984600, 1792071000],
+                "indicators": {"quote": [{
+                    "close": [228.52, 221.30, None],
+                    "volume": [1, 2, 3],
+                    "open": [224.34, 225.53, 215.34],
+                }]},
+            }]}
+        }
+        with mock.patch.object(qt, "_get", return_value=payload):
+            q = qt.from_yahoo("NVDA")
+        self.assertAlmostEqual(q["prev_close"], 221.30)
+        self.assertNotAlmostEqual(q["prev_close"], 228.52)
+        self.assertEqual(q["price"], 217.23)
     def test_yahoo_retries_query2(self):
         payload = {
             "chart": {"result": [{

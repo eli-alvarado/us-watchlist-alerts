@@ -44,7 +44,7 @@ Auto fallback (`WATCHLIST_PROVIDER=auto` / `--provider auto`), first success win
 
 Yahoo hosts are unofficial and can change, rate-limit, or require cookies. Free Yahoo / yfinance quotes may be delayed ~15 minutes. HTTP calls retry 429/5xx; failures raise `QuoteError` with provider, status, and a hint.
 
-**Yahoo `chartPreviousClose` is not yesterday's close.** On a 1-year daily chart it is the print before the range (often ~12 months old). This repo uses `previousClose` / `regularMarketPreviousClose` when present, otherwise the prior daily bar. `as_of` prefers `regularMarketTime`.
+**Yahoo `chartPreviousClose` is not yesterday's close.** On a 1-year daily chart it is the print before the range (often ~12 months old). This repo uses `previousClose` / `regularMarketPreviousClose` when present (unless it has rolled onto last), otherwise the prior **aligned** daily bar. After ~20:00 ET the 1d chart often keeps today’s timestamp with `close: None`; that row is dropped so `prev_close` stays yesterday, not two sessions ago. `as_of` prefers `regularMarketTime`.
 
 **Yahoo crumb:** quoteSummary and options need cookies (`fc.yahoo.com` 404 is OK) plus a crumb (from the quote HTML, or `/v1/test/getcrumb`). `getcrumb` 429s easily; the HTML crumb is preferred. When that still fails, earnings fall through to Nasdaq; IV tries yfinance if installed. Remaining failures set `earnings_error` / `iv_error` and print a WARN — they do not invent values. The daily chart path does not need a crumb.
 

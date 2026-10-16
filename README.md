@@ -155,9 +155,11 @@ NOTIFY file /tmp/alerts.jsonl
 
 A second run in the same session prints `no new alerts` until a level re-arms or the next trading day (daily events). Agents running [HEARTBEAT.md](HEARTBEAT.md) stay silent when the list is empty. `--notify` / `WATCHLIST_NOTIFY` also stay silent on empty, skipped, and `--dry-run` runs.
 
-### Live after hours (2026-10-15, delayed Yahoo chart — snapshot)
+### Live after hours (2026-10-15 ~18:45 ET, yahoo-chart)
 
-No `--force-session`. Crumb worked: AAPL earnings `2026-11-02` (`yahoo-calendar`), ATM IV 22.4% (`yahoo-options`). Nasdaq agreed on AAPL (`2026-11-02`) when Yahoo layers were forced off. SPY (an ETF) has no earnings date — the CLI now says so in one line instead of dumping a Yahoo 404 body.
+Last regular close vs **Wednesday 2026-10-14** prior close (AAPL $342.96, NVDA $221.30, SPY $769.60). Source: delayed Yahoo chart, no `--force-session`. Same last prints as the weekday Action at 20:09 ET; that first snapshot used Tuesday 2026-10-13 as `prev_close` because a trailing today-bar with `close: None` was treated as “today” (fixed in 0.4.1).
+
+Crumb worked: AAPL earnings `2026-11-02` (`yahoo-calendar`), ATM IV 22.4% (`yahoo-options`). Nasdaq agreed on AAPL (`2026-11-02`) when Yahoo layers were forced off. SPY (an ETF) has no earnings date — the CLI now says so in one line instead of dumping a Yahoo 404 body.
 
 ```text
 [2026-10-15 18:45 ET] session=after — market closed, showing last regular close
@@ -275,7 +277,7 @@ Load the three `SKILL.md` files as instructions, give the agent shell access to 
 
 ## Scheduling
 
-This repo also runs a **public sample** on weekdays ([docs/live/](docs/live/)) via `.github/workflows/live.yml` — session-aware, no secrets, at most one commit per ET day. Job summaries still update when a file for today already exists.
+This repo also runs a **public sample** on weekdays ([docs/live/](docs/live/)) via `.github/workflows/live.yml` — session-aware, no secrets, at most one commit per ET weekday. Job summaries still update when a file for today already exists.
 
 Run the HEARTBEAT checklist every 15–30 min during market hours, or use cron (times in ET):
 
@@ -373,7 +375,7 @@ Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 - Alpaca/Finnhub history depends on bars/candles succeeding; if those calls fail, MA/RSI/52-week rules will not fire even though the last price is present.
 - US-listed equities and ETFs only. No order routing. `notify-send` is Linux-only; use ntfy on macOS/Windows.
 
-Full write-up: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Changelog: [CHANGELOG.md](CHANGELOG.md). Keys and notify URLs: [SECURITY.md](SECURITY.md). Daily public sample: [docs/live/](docs/live/).
+Full write-up: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Changelog: [CHANGELOG.md](CHANGELOG.md). Keys and notify URLs: [SECURITY.md](SECURITY.md). Weekday public sample: [docs/live/](docs/live/).
 
 ## Comparison
 

@@ -45,7 +45,7 @@ User request, restated every 15 minutes: *keep an eye on these — ping me if AA
 
 ## Tape (replayed)
 
-NVDA prior close **$221.30**. 09:30 last −2.59%, session low already **−3.70%**. 09:45 last **−3.26%**, low **−3.82%**. Last recovered to about **−1.8%** by the close. AAPL stayed **$341–$347** all day (never dropped back through $340, so the level stays latched).
+NVDA prior close **$221.30** (Wednesday 2026-10-14, Yahoo `previousClose` at ~18:57 ET). 09:30 last −2.59%, session low already **−3.70%**. 09:45 last **−3.26%**, low **−3.82%**. Last recovered to about **−1.8%** by the close. AAPL stayed **$341–$347** all day (never dropped back through $340, so the level stays latched).
 
 ## Files
 

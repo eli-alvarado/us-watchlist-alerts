@@ -65,7 +65,7 @@ Any rule may set `cooldown_minutes` to override `settings.cooldown_minutes`.
 1. `--fixture` path, if given (tests/demos only).
 2. Alpaca snapshot + daily bars, if `ALPACA_API_KEY_ID` **and** `ALPACA_API_SECRET_KEY` are set (official US feed).
 3. `yfinance` if installed (`pip install yfinance`).
-4. Yahoo public chart API (stdlib, unofficial, best-effort): `query1.finance.yahoo.com`, then `query2`.
+4. Yahoo public chart API (stdlib, unofficial, best-effort): `query1.finance.yahoo.com`, then `query2`. `prev_close` is `previousClose` or the prior aligned daily bar — after ~20:00 ET a today-row with `close: None` is dropped, not treated as yesterday.
 5. Finnhub quote + candles, if `FINNHUB_API_KEY` is set.
 6. Alpha Vantage daily, if `ALPHAVANTAGE_API_KEY` is set.
 

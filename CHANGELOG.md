@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-- README install is per-agent and verified: Claude Code needs `-a claude-code` (`.claude/skills/`); Cursor / Codex / Gemini CLI use `-a cursor` / `-a codex` / `-a gemini-cli` (`.agents/skills/`). `--all` writes both. `watchlist.py init --empty` starts a live book so the fixture-era AAPL $240 example does not fire on a ~$342 print. Windows `tzdata` hint if `America/New_York` is missing.
+## 0.4.1 — 2026-10-16
+
+After-hours `prev_close` and weekday wording.
+
+- **Yahoo 1d after ~20:00 ET:** the chart keeps today’s timestamp with `close: None`. `_aligned_ohlcv` now drops that timestamp with the null close, so `prev_close` is yesterday (NVDA $221.30 on 2026-10-15) not two sessions ago ($228.52). `previousClose` that has rolled onto last is ignored when bars disagree.
+- **Docs:** `docs/live/2026-10-15.md` uses Thursday last vs Wednesday prior close (same as README ~18:45 ET and the heartbeat replay). The original 20:09 ET Action write is footnoted. Live Action copy says **weekday**, not daily.
+- README install notes from Unreleased 0.4.0: Claude Code needs `-a claude-code`; Cursor / Codex / Gemini CLI use `-a cursor` / `-a codex` / `-a gemini-cli`. `watchlist.py init --empty` starts a live book.
 
 ## 0.4.0 — 2026-10-15
 

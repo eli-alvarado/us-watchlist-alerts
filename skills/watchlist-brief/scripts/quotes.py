@@ -8,7 +8,8 @@ Fallback order for ``provider=auto`` (first success wins):
 3. ``yfinance`` if the package is importable
 4. Yahoo public chart API (stdlib, unofficial, best-effort) — ``query1`` then ``query2``.
    Do not use ``chartPreviousClose`` as yesterday's close (it is the print before the
-   chart range). Prior session comes from ``previousClose`` or the previous daily bar.
+   chart range). Prior session comes from ``previousClose`` or the previous *aligned*
+   daily bar (a trailing today-row with ``close: None`` is dropped, not treated as today).
 5. Finnhub quote + candles, if ``FINNHUB_API_KEY`` is set
 6. Alpha Vantage daily, if ``ALPHAVANTAGE_API_KEY`` is set
 
@@ -35,7 +36,7 @@ import argparse, datetime as dt, http.cookiejar, json, os, re, sys, time, urllib
 from zoneinfo import ZoneInfo
 
 UA = {
-    "User-Agent": "us-watchlist-alerts/0.4.0 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
+    "User-Agent": "us-watchlist-alerts/0.4.1 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
 }
 # Yahoo crumb/cookie endpoints reject the project UA; chart still accepts it.
 YAHOO_BROWSER_UA = {
@@ -240,13 +241,26 @@ def from_fixture(symbol, path):
     return _finish(q)
 
 
-def _aligned_ohlcv(quote_ind):
-    """Zip daily bars and drop sessions whose close is missing, keeping volume aligned."""
+def _near_price(a, b):
+    try:
+        return abs(float(a) - float(b)) <= max(0.01, abs(float(b)) * 1e-4)
+    except (TypeError, ValueError):
+        return False
+
+
+def _aligned_ohlcv(quote_ind, timestamps=None):
+    """Zip daily bars and drop sessions whose close is missing.
+
+    Volume and timestamps stay aligned with the surviving closes. After ~20:00 ET
+    Yahoo's 1d chart often keeps today's 09:30 timestamp with ``close: None``;
+    that row is not a finished session and must not drive ``last_is_today``.
+    """
     closes_raw = quote_ind.get("close") or []
     vols_raw = quote_ind.get("volume") or []
     opens_raw = quote_ind.get("open") or []
+    ts_raw = list(timestamps) if timestamps else []
     n = len(closes_raw)
-    closes, vols, opens = [], [], []
+    closes, vols, opens, ts = [], [], [], []
     for i, c in enumerate(closes_raw):
         if c is None:
             continue
@@ -255,22 +269,15 @@ def _aligned_ohlcv(quote_ind):
         o = opens_raw[i] if i < len(opens_raw) else None
         if o is not None:
             opens.append(o)
-    return closes, vols, opens, n
+        if i < len(ts_raw):
+            ts.append(ts_raw[i])
+    return closes, vols, opens, n, ts
 
 
-def _chart_prev_close(meta, closes, timestamps=None, price=None, now=None):
-    """Yesterday's session close.
-
-    Yahoo's ``chartPreviousClose`` is the close *before the requested range*
-    (so a 1y chart returns a year-ago print). Prefer an explicit previousClose,
-    then the daily bar before today's session.
-    """
-    meta = meta or {}
-    for key in ("previousClose", "regularMarketPreviousClose"):
-        if meta.get(key) is not None:
-            return meta[key]
+def _prev_from_bars(closes, timestamps=None, price=None, now=None):
+    """Prior session from aligned daily closes (``closes[-2]`` if last bar is today)."""
     if not closes:
-        return meta.get("chartPreviousClose")
+        return None
     last_is_today = False
     if timestamps:
         try:
@@ -281,13 +288,34 @@ def _chart_prev_close(meta, closes, timestamps=None, price=None, now=None):
             last_is_today = False
     if not last_is_today and price is not None and len(closes) > 1:
         # No usable timestamp: last bar matching last price is almost always today's developing close.
-        try:
-            last_is_today = abs(float(closes[-1]) - float(price)) <= max(0.01, abs(float(price)) * 1e-4)
-        except (TypeError, ValueError):
-            last_is_today = False
+        last_is_today = _near_price(closes[-1], price)
     if last_is_today and len(closes) > 1:
         return closes[-2]
     return closes[-1]
+
+
+def _chart_prev_close(meta, closes, timestamps=None, price=None, now=None):
+    """Yesterday's session close.
+
+    Yahoo's ``chartPreviousClose`` is the close *before the requested range*
+    (so a 1y chart returns a year-ago print). Prefer an explicit previousClose
+    unless it has rolled onto last (fake 0% day); otherwise the daily bar
+    before today's session. ``timestamps`` must be aligned with ``closes``
+    (see ``_aligned_ohlcv``) so a null today-bar does not skip yesterday.
+    """
+    meta = meta or {}
+    bar_prev = _prev_from_bars(closes, timestamps, price, now)
+    for key in ("previousClose", "regularMarketPreviousClose"):
+        val = meta.get(key)
+        if val is None:
+            continue
+        # After the bell Yahoo sometimes copies last onto previousClose.
+        if price is not None and _near_price(val, price) and bar_prev is not None and not _near_price(bar_prev, val):
+            return bar_prev
+        return val
+    if bar_prev is not None:
+        return bar_prev
+    return meta.get("chartPreviousClose")
 
 
 def _as_of_from_meta(meta):
@@ -458,11 +486,11 @@ def from_yahoo(symbol):
     r = results[0]
     m = r.get("meta") or {}
     ind = (r.get("indicators") or {}).get("quote") or [{}]
-    closes, vols, opens, _ = _aligned_ohlcv(ind[0] if ind else {})
+    closes, vols, opens, _, ts = _aligned_ohlcv(ind[0] if ind else {}, r.get("timestamp"))
     price = m.get("regularMarketPrice")
     if price is None and closes:
         price = closes[-1]
-    prev = _chart_prev_close(m, closes, timestamps=r.get("timestamp"), price=price)
+    prev = _chart_prev_close(m, closes, timestamps=ts, price=price)
     opn = m.get("regularMarketOpen")
     if opn is None:
         opn = opens[-1] if opens else None
