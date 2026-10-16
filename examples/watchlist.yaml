@@ -3,7 +3,7 @@ version: 1
 settings:
   cooldown_minutes: 240
   sessions: [regular]
-  extra_closures: [2026-11-04]   # Example only: replace with a confirmed full-day closure for your feed
+  extra_closures: []  # e.g. [YYYY-MM-DD] for an unscheduled NYSE closure
   stale_after_seconds: 900
 tickers:
   - symbol: MSFT

@@ -130,7 +130,7 @@ class Watchlist(unittest.TestCase):
         short = next(t for t in wl["tickers"] if t["symbol"] == "TSLA")
         self.assertEqual(short["side"], "short")
         self.assertGreater(short["stop"], short["entry"])
-        self.assertIn("2026-11-04", [str(day) for day in wl["settings"]["extra_closures"]])
+        self.assertEqual(list(wl["settings"].get("extra_closures") or []), [])
     def test_class_shares_symbol(self):
         self.assertTrue(wlm.SYMBOL_RE.match("BRK.B")); self.assertTrue(wlm.SYMBOL_RE.match("BF-B"))
     def test_cli(self):
