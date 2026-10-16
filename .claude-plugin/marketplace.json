@@ -5,15 +5,15 @@
     "url": "https://github.com/eli-alvarado"
   },
   "metadata": {
-    "description": "US stock watchlists and price alerts for Claude Code, Codex, Cursor, and Gemini CLI.",
-    "version": "0.3.3"
+    "description": "US stock watchlist and price alerts for Claude Code, Cursor, Codex, and Gemini CLI. No API key.",
+    "version": "0.4.0"
   },
   "plugins": [
     {
       "name": "us-watchlist-alerts",
       "source": "./",
-      "description": "Watchlist manager, NYSE-aware price alerts, and morning/close briefs. Python stdlib plus optional yfinance.",
-      "version": "0.3.3"
+      "description": "US stock watchlist manager, NYSE-aware price alerts, and morning/close briefs. Stdlib Yahoo; never places trades.",
+      "version": "0.4.0"
     }
   ]
 }

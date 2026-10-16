@@ -1,8 +1,8 @@
 {
   "name": "us-watchlist-alerts",
   "displayName": "US Watchlist & Price Alerts",
-  "version": "0.3.3",
-  "description": "US stock watchlists, NYSE-aware price alerts, and morning/close briefs. No API keys required. Never places trades.",
+  "version": "0.4.0",
+  "description": "US stock watchlist and NYSE-aware price alerts for Claude Code, Cursor, and Codex. No API key. Never places trades.",
   "author": {
     "name": "Eli Alvarado",
     "url": "https://github.com/eli-alvarado"

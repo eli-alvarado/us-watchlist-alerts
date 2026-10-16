@@ -23,7 +23,9 @@ Scripts use the Python 3.10+ standard library. Optional extras in `requirements.
 | Schema | `scripts/watchlist.py` `validate`, `examples/` | Validation tests |
 | Agent instructions | `skills/*/SKILL.md`, `HEARTBEAT.md` | Read them as the agent would; keep "no trades" language |
 
-`npx skills add` copies each `skills/<name>/` folder. After editing a root script or `data/holidays_overrides.json`, run `python3 scripts/bundle_skills.py` so the copies stay identical (CI asserts this).
+`npx skills add` copies each `skills/<name>/` folder. After editing a root script or `data/holidays_overrides.json`, run `python3 scripts/bundle_skills.py` so the copies stay identical (CI asserts this). That bundle also ships `examples/quotes-fixture.json` and `scripts/quickstart.py`.
+
+Do not commit API keys, webhook URLs, or `.alert_state.json`. See [SECURITY.md](SECURITY.md).
 
 Run from the repo root so `scripts/` imports resolve the same way the skills document.
 

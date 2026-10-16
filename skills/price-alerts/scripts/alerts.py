@@ -287,6 +287,9 @@ def main(argv=None):
     a = ap.parse_args(argv)
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
     if now.tzinfo is None: now = now.replace(tzinfo=mc.ET)
+    if not os.path.exists(a.watchlist):
+        print(wlm.missing_watchlist_hint(a.watchlist), file=sys.stderr)
+        return 2
     try:
         mc.refresh_official_calendar(now.year)
     except Exception as e:

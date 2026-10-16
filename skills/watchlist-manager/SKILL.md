@@ -37,7 +37,9 @@ A `stop` implies a `stop_hit` alert and `targets` imply `target_hit` automatical
 ## Operations (prefer the script; it validates and writes atomically)
 `scripts/` ships next to this SKILL.md after `npx skills add`. Run from this skill folder, or from a git clone (root `scripts/` is the same files):
 ```bash
+python3 scripts/watchlist.py init
 python3 scripts/watchlist.py add NVDA --thesis "AI capex" --entry 160 --target 190 --target 220 --stop 140 --tag ai --tag semis --alert price_below:150
+python3 scripts/watchlist.py add NVDA --file swing.json --alert price_below:150
 python scripts/watchlist.py update NVDA --stop 145
 python scripts/watchlist.py update NVDA --tag megacap --alert rsi_above:75 --append
 python scripts/watchlist.py remove NVDA

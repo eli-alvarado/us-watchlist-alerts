@@ -1,16 +1,43 @@
-# us-watchlist-alerts
+# US Stock Watchlist & Price Alerts for Claude Code, Cursor, and Codex
 
 [![CI](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml/badge.svg)](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml)
 
-Open-source **Agent Skills** for a **US stock watchlist and price alerts**: track tickers with a thesis, entry, targets and stop; get de-duplicated alerts on price levels, % moves, gaps, 52-week highs/lows, MA crosses, RSI, ATM IV, volume spikes, intraday range and earnings; optionally push them to ntfy, Slack, a webhook, or the Linux desktop; and get morning/close briefs. Aware of NYSE hours, pre/after-market, early closes and holidays, in US/Eastern time.
+**US stock watchlist**, **price alerts**, and **NYSE market-hours** checks for Claude Code, Cursor, Codex, Gemini CLI, and any agent that reads `SKILL.md`. Track tickers with a thesis, entry, targets, and stop. Get de-duplicated alerts on price levels, daily % moves, gaps, 52-week highs and lows, moving-average crosses, RSI, ATM IV, volume spikes, intraday range, and earnings — then a morning or close brief. **No API key and no MCP required.** Default path is Python 3 stdlib + the unofficial Yahoo Finance chart. Optional: `yfinance`, Alpaca, Finnhub, Alpha Vantage.
 
-Works in **Claude Code, Codex CLI, Cursor, Gemini CLI** and any agent that reads `SKILL.md`. **No API keys or MCP required.** Default path is the Python standard library plus the unofficial Yahoo Finance chart endpoint. `yfinance`, Alpaca, Finnhub, Alpha Vantage, `alpaca-mcp-server` and `tradingview-mcp` are optional.
+> **Not financial advice.** These skills **never place, modify, or cancel a trade**. Free quotes may be delayed ~15 minutes. Use at your own risk.
 
-> **Not financial advice.** The skills tell the agent to **never place, modify or cancel a trade without your explicit confirmation of that specific order**, and to give no buy/sell recommendations. Free market data may be delayed ~15 minutes. Use at your own risk.
+![Hero: add AAPL to the watchlist, one price alert fires, the next run stays quiet — fixture / replayed, not live](docs/hero.gif)
 
-![Fixture demo: after-hours last-close alerts, then a silent second run](docs/demo.gif)
+About 15 seconds, **fixture / replayed** sample quotes (not a live feed). Same story as `python3 scripts/quickstart.py` after install.
 
-Demo above is **offline**, driven by `tests/fixtures/` (the same data CI uses). It shows the after-hours banner (`market closed, showing last regular close`) and a second run that stays silent. Live Yahoo/yfinance numbers will differ and may be delayed ~15 minutes.
+Longer after-hours fixture walkthrough: [docs/demo.gif](docs/demo.gif).
+
+## How it works
+
+```mermaid
+flowchart LR
+  You["You or a 15-min HEARTBEAT"] --> WL["watchlist.json"]
+  WL --> Q["quotes.py"]
+  Q --> A["alerts.py"]
+  CAL["market_calendar.py<br/>NYSE hours / holidays"] --> A
+  A --> ST[".alert_state.json<br/>latch · once-per-day · cooldown"]
+  A --> OUT["ALERT lines · ntfy · Slack · webhook"]
+  WL --> B["brief.py<br/>morning / close"]
+```
+
+You own the list. The scripts fetch a quote, evaluate only **new** conditions, and stay quiet when nothing changed — including after the bell and on Saturday.
+
+## FAQ
+
+**What does it cost?** Free. No API key for the default Yahoo chart path. Optional Alpaca / Finnhub / Alpha Vantage keys are only if you want those feeds.
+
+**Does it place trades?** No. Every `SKILL.md` and [SECURITY.md](SECURITY.md) say the agent must never place, modify, or cancel an order without your explicit confirmation of that specific order. There is no broker submit path in this repo.
+
+**Where does my data go?** `watchlist.json` and `.alert_state.json` stay on disk in the working directory. Outbound HTTPS is quotes and (if you enable them) notify sinks. Keys belong in the environment, never in the watchlist file. See [SECURITY.md](SECURITY.md).
+
+**What data sources?** Default: unofficial Yahoo Finance chart (stdlib). Fallback order and earnings/IV layers: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Quotes may be delayed ~15 minutes. US-listed stocks and ETFs only.
+
+**Why did I get fewer alerts with the skill?** That is the point. Same distinct events, no duplicate pings — see [With vs. without](#with-vs-without-the-skill).
 
 ## With vs. without the skill
 
@@ -50,7 +77,7 @@ On a **single** question, a capable agent without the skill is fine — live pri
 | [`watchlist-brief`](skills/watchlist-brief/SKILL.md) | Morning or close summary: table, movers, distance to stop/target, upcoming earnings |
 | [`HEARTBEAT.md`](HEARTBEAT.md) | Checklist for a scheduled check that stays silent unless something new happens |
 
-Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation), `brief.py`, `market_calendar.py`, `indicators.py`.
+Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation + `init`), `brief.py`, `market_calendar.py`, `indicators.py`, `quickstart.py` (offline fixture demo after install).
 
 ## Quick start
 
@@ -60,14 +87,21 @@ One-line install that **ships the scripts** (no extra clone):
 npx skills add eli-alvarado/us-watchlist-alerts -y
 ```
 
-Then run them from the skill folder the installer just created (stdlib, no keys):
+Default `-y` lands in `.agents/skills/` (Cursor and Codex). Claude Code:
 
 ```bash
-python3 .agents/skills/price-alerts/scripts/quotes.py AAPL
-python3 .agents/skills/price-alerts/scripts/alerts.py --watchlist .agents/skills/price-alerts/examples/watchlist.json
+npx skills add eli-alvarado/us-watchlist-alerts -y -a claude-code
 ```
 
-If your agent uses `.cursor/skills` (or another path), swap the prefix — `scripts/` is always next to that skill's `SKILL.md`.
+Then `cd` into the skill folder (next to `SKILL.md`) and run the quickstart — **offline fixture**, labeled, no keys:
+
+```bash
+cd .agents/skills/price-alerts    # or .claude/skills/price-alerts
+python3 scripts/quickstart.py     # init watchlist + one fixture alert
+python3 scripts/quotes.py AAPL    # live Yahoo when you want it
+```
+
+`--file` on `watchlist.py` can sit before or after the subcommand (`add AAPL --file swing.json` works). If you run `alerts.py` with no `watchlist.json`, it now tells you to `python3 scripts/watchlist.py init` instead of printing a silent “no new alerts.”
 
 Or clone the repo and use the same files at the root:
 
@@ -228,6 +262,8 @@ Load the three `SKILL.md` files as instructions, give the agent shell access to 
 
 ## Scheduling
 
+This repo also runs a **public sample** on weekdays ([docs/live/](docs/live/)) via `.github/workflows/live.yml` — session-aware, no secrets, at most one commit per ET day. Job summaries still update when a file for today already exists.
+
 Run the HEARTBEAT checklist every 15–30 min during market hours, or use cron (times in ET):
 
 ```cron
@@ -324,7 +360,7 @@ Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 - Alpaca/Finnhub history depends on bars/candles succeeding; if those calls fail, MA/RSI/52-week rules will not fire even though the last price is present.
 - US-listed equities and ETFs only. No order routing. `notify-send` is Linux-only; use ntfy on macOS/Windows.
 
-Full write-up: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Changelog: [CHANGELOG.md](CHANGELOG.md).
+Full write-up: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Changelog: [CHANGELOG.md](CHANGELOG.md). Keys and notify URLs: [SECURITY.md](SECURITY.md). Daily public sample: [docs/live/](docs/live/).
 
 ## Comparison
 

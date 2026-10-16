@@ -12,12 +12,14 @@ Evaluates alert rules from the watchlist (see `watchlist-manager`) against fresh
 
 ## Run it
 ```bash
+python3 scripts/watchlist.py init                                                         # copy examples/watchlist.json if missing
+python3 scripts/quickstart.py                                                             # offline fixture demo (labeled, not live)
 python3 scripts/alerts.py --watchlist watchlist.json --state .alert_state.json           # text output
-python scripts/alerts.py --format json                                                    # machine-readable
-python scripts/alerts.py --force-session                                                  # evaluate on weekends / holidays too
-python scripts/alerts.py --dry-run                                                        # don't update cooldown state
-python scripts/alerts.py --notify                                                         # also deliver via WATCHLIST_NOTIFY sinks
-python scripts/market_calendar.py                                                         # current ET session
+python3 scripts/alerts.py --format json                                                    # machine-readable
+python3 scripts/alerts.py --force-session                                                  # evaluate on weekends / holidays too
+python3 scripts/alerts.py --dry-run                                                        # don't update cooldown state
+python3 scripts/alerts.py --notify                                                         # also deliver via WATCHLIST_NOTIFY sinks
+python3 scripts/market_calendar.py                                                         # current ET session
 ```
 Output: `ALERT <message>` lines, or `no new alerts`, or `market closed, showing last regular close` after the bell (last regular print; no `--force-session` needed). Weekends and full-day holidays stay silent (`market closed (weekend|holiday). Next session YYYY-MM-DD`) unless `--force-session`. Data errors go to stderr as `WARN` (including `earnings_error` / `iv_error`). `NOTIFY <sink>` confirms delivery; sink failures are `WARN notify …` and must not abort the check. Never treat a notify sink as a broker.
 

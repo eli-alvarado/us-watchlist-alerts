@@ -57,10 +57,10 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 
 - [x] CI on Python 3.10–3.13 (`python3 -m unittest discover -s tests`)
 - [x] CONTRIBUTING.md, issue templates, limitations doc
-- [x] CHANGELOG.md (0.1.0 … 0.3.3)
+- [x] CHANGELOG.md (0.1.0 … 0.4.0)
 - [x] GitHub release v0.2.0
-- [ ] File 3–5 **good first issues** (see CONTRIBUTING.md) so the repo looks open, not a dump
-- [ ] Pin a discussion or README FAQ: delayed data, unofficial Yahoo, no China listings
+- [x] File 3–5 **good first issues** (see CONTRIBUTING.md) so the repo looks open, not a dump
+- [x] README FAQ: cost, never trades, privacy, delayed Yahoo, US listings only
 - [ ] Optional: `pre-commit` only if it stays one ruff/format hook — do not bury contributors in tooling
 
 ## Roadmap
@@ -87,8 +87,12 @@ Time the post after a **GitHub release** (`v0.3.0`) so the README badge and tag 
 - [x] v0.3.3: opt-in `intraday_low_pct` / `intraday_extreme_pct`; heartbeat replay demo (same 3 events; 58 duplicate pings avoided)
 - International listings stay out of scope unless someone owns the calendar and a legal data source.
 
-### v0.4 — still no auto-trade
+### v0.4 — pre-launch hardening (tagged 0.4.0)
 
+- [x] Fresh-install test + `watchlist.py init` / `quickstart.py` / `--file` anywhere
+- [x] Hero GIF, How-it-works mermaid, FAQ, SECURITY.md
+- [x] Scheduled market-day snapshot (`docs/live/`, one commit/day, no secrets)
+- [x] README SEO lede
 - Email / Telegram sinks (need credentials + bounce/rate hygiene; ntfy covers many phones today)
 - IV rank / percentile only if a free source actually returns a history, not a synthetic from prices
 - Live NYSE status feed (calendar cache is not a substitute for "market halted")

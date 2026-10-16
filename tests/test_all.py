@@ -125,7 +125,7 @@ class Watchlist(unittest.TestCase):
     def test_class_shares_symbol(self):
         self.assertTrue(wlm.SYMBOL_RE.match("BRK.B")); self.assertTrue(wlm.SYMBOL_RE.match("BF-B"))
     def test_cli(self):
-        self.assertIsNone(wlm.main(["--file", self.p, "add", "AMD", "--entry", "150", "--stop", "130", "--tag", "semis"]))
+        self.assertEqual(wlm.main(["--file", self.p, "add", "AMD", "--entry", "150", "--stop", "130", "--tag", "semis"]), 0)
         self.assertEqual(wlm.main(["--file", self.p, "validate"]), 0)
         with mock.patch("sys.stderr"):
             self.assertEqual(wlm.main(["--file", self.p, "show", "NOPE"]), 1)
@@ -797,7 +797,7 @@ class IvAndRangeAlerts(unittest.TestCase):
 class SkillBundle(unittest.TestCase):
     def test_skill_scripts_match_root(self):
         names = ("alerts.py", "brief.py", "quotes.py", "watchlist.py",
-                 "market_calendar.py", "notify.py", "indicators.py")
+                 "market_calendar.py", "notify.py", "indicators.py", "quickstart.py")
         root = os.path.join(ROOT, "scripts")
         for skill in ("price-alerts", "watchlist-brief", "watchlist-manager"):
             dest = os.path.join(ROOT, "skills", skill, "scripts")
@@ -805,6 +805,7 @@ class SkillBundle(unittest.TestCase):
                 with open(os.path.join(root, n), "rb") as a, open(os.path.join(dest, n), "rb") as b:
                     self.assertEqual(a.read(), b.read(), f"{skill}/scripts/{n} out of sync; run python3 scripts/bundle_skills.py")
             self.assertTrue(os.path.exists(os.path.join(ROOT, "skills", skill, "data", "holidays_overrides.json")))
+            self.assertTrue(os.path.exists(os.path.join(ROOT, "skills", skill, "examples", "quotes-fixture.json")))
 
 
 class HeartbeatReplay(unittest.TestCase):
@@ -838,6 +839,96 @@ class HeartbeatReplay(unittest.TestCase):
         after = [r for r in rep["with_skill"] if r.get("last_close")]
         self.assertTrue(after)
         self.assertTrue(all(r["alerts"] == [] for r in after))
+
+
+class WatchlistCli(unittest.TestCase):
+    def test_file_flag_after_subcommand(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "swing.json")
+        rc = wlm.main(["add", "MSFT", "--file", path, "--alert", "price_above:400"])
+        self.assertEqual(rc, 0)
+        self.assertTrue(os.path.exists(path))
+        self.assertEqual(wlm.load(path)["tickers"][0]["symbol"], "MSFT")
+
+    def test_init_copies_example(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "watchlist.json")
+        rc = wlm.main(["init", "--file", path])
+        self.assertEqual(rc, 0)
+        wl = wlm.load(path)
+        self.assertGreaterEqual(len(wl["tickers"]), 1)
+        self.assertEqual(wlm.main(["init", "--file", path]), 1)
+
+    def test_missing_watchlist_hint(self):
+        msg = wlm.missing_watchlist_hint("nope.json")
+        self.assertIn("watchlist.py init", msg)
+
+
+class AlertsMissingWatchlist(unittest.TestCase):
+    def test_alerts_hint_when_file_missing(self):
+        buf = io.StringIO()
+        with mock.patch("sys.stderr", buf):
+            rc = alerts.main(["--watchlist", os.path.join(tempfile.mkdtemp(), "missing.json")])
+        self.assertEqual(rc, 2)
+        self.assertIn("init", buf.getvalue())
+
+
+class FreshInstallLayouts(unittest.TestCase):
+    """Mimic Claude Code / Cursor / Codex skill folders after npx skills add."""
+
+    def _run_layout(self, rel):
+        import shutil
+        d = tempfile.mkdtemp()
+        dest = os.path.join(d, *rel.split("/"), "price-alerts")
+        shutil.copytree(os.path.join(ROOT, "skills", "price-alerts"), dest)
+        fx = os.path.join(dest, "examples", "quotes-fixture.json")
+        self.assertTrue(os.path.exists(fx), rel)
+        wl = os.path.join(dest, "watchlist.json")
+        rc = wlm.main(["init", "--file", wl])
+        self.assertEqual(rc, 0, rel)
+        st = os.path.join(dest, ".state.json")
+        rc = alerts.main(["--watchlist", wl, "--state", st, "--fixture", fx,
+                          "--now", "2026-10-15T18:30:00-04:00"])
+        self.assertEqual(rc, 0, rel)
+        return dest
+
+    def test_claude_cursor_codex_agents_layouts(self):
+        for rel in (".claude/skills", ".cursor/skills", ".agents/skills", ".codex/skills"):
+            dest = self._run_layout(rel)
+            self.assertTrue(os.path.exists(os.path.join(dest, "scripts", "quickstart.py")), rel)
+
+
+class LiveSnapshot(unittest.TestCase):
+    def test_skips_saturday(self):
+        import importlib.util
+        path = os.path.join(ROOT, "scripts", "live_snapshot.py")
+        spec = importlib.util.spec_from_file_location("live_snap", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        d = tempfile.mkdtemp()
+        out = mod.run(WL, d, now=T("2026-10-17T10:00:00"), fixture=FX)
+        self.assertTrue(out["skipped"])
+        self.assertEqual(out["reason"], "weekend")
+        self.assertFalse(os.path.exists(out["path"]))
+
+    def test_fixture_once_per_day(self):
+        import importlib.util
+        path = os.path.join(ROOT, "scripts", "live_snapshot.py")
+        spec = importlib.util.spec_from_file_location("live_snap", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        d = tempfile.mkdtemp()
+        now = T("2026-10-15T16:20:00")
+        a = mod.run(WL, d, now=now, fixture=FX)
+        self.assertFalse(a["skipped"])
+        self.assertTrue(os.path.exists(a["path"]))
+        with open(a["path"]) as f:
+            body = f.read()
+        self.assertIn("fixture", body.lower())
+        self.assertIn("ALERT", body)
+        b = mod.run(WL, d, now=now, fixture=FX)
+        self.assertTrue(b["skipped"])
+        self.assertEqual(b["reason"], "already")
 
 
 if __name__ == "__main__":

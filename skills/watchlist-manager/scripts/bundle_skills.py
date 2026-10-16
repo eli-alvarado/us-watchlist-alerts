@@ -5,13 +5,15 @@ import os, shutil, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILLS = ("price-alerts", "watchlist-brief", "watchlist-manager")
 PY_FILES = ("alerts.py", "brief.py", "indicators.py", "market_calendar.py",
-            "notify.py", "quotes.py", "watchlist.py", "bundle_skills.py")
+            "notify.py", "quotes.py", "watchlist.py", "bundle_skills.py",
+            "quickstart.py")
 
 
 def bundle():
     src_scripts = os.path.join(ROOT, "scripts")
     src_data = os.path.join(ROOT, "data", "holidays_overrides.json")
     src_ex = os.path.join(ROOT, "examples", "watchlist.json")
+    src_fx = os.path.join(ROOT, "examples", "quotes-fixture.json")
     copied = []
     for name in SKILLS:
         dest = os.path.join(ROOT, "skills", name, "scripts")
@@ -25,6 +27,8 @@ def bundle():
         ex_dest = os.path.join(ROOT, "skills", name, "examples")
         os.makedirs(ex_dest, exist_ok=True)
         shutil.copy2(src_ex, os.path.join(ex_dest, "watchlist.json"))
+        if os.path.exists(src_fx):
+            shutil.copy2(src_fx, os.path.join(ex_dest, "quotes-fixture.json"))
     return copied
 
 

@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "settings": {
+    "cooldown_minutes": 240,
+    "rearm_pct": 0.5,
+    "sessions": ["regular"],
+    "max_alerts_per_run": 20,
+    "timezone_display": "America/New_York"
+  },
+  "tickers": [
+    {
+      "symbol": "AAPL",
+      "side": "watch",
+      "added": "2026-10-15",
+      "thesis": "Sample ticker for the daily public snapshot",
+      "entry": null,
+      "targets": [],
+      "stop": null,
+      "tags": ["sample"],
+      "alerts": [
+        {"type": "pct_change_down", "value": 3},
+        {"type": "pct_change_up", "value": 3},
+        {"type": "near_52w_high", "value": 2}
+      ],
+      "notes": "Public sample — not a recommendation"
+    },
+    {
+      "symbol": "NVDA",
+      "side": "watch",
+      "added": "2026-10-15",
+      "thesis": "Sample ticker for the daily public snapshot",
+      "entry": null,
+      "targets": [],
+      "stop": null,
+      "tags": ["sample"],
+      "alerts": [
+        {"type": "pct_change_down", "value": 3},
+        {"type": "pct_change_up", "value": 3}
+      ],
+      "notes": ""
+    },
+    {
+      "symbol": "SPY",
+      "side": "watch",
+      "added": "2026-10-15",
+      "thesis": "Sample ETF for the daily public snapshot",
+      "entry": null,
+      "targets": [],
+      "stop": null,
+      "tags": ["sample"],
+      "alerts": [
+        {"type": "pct_change_down", "value": 2},
+        {"type": "pct_change_up", "value": 2}
+      ],
+      "notes": ""
+    }
+  ]
+}

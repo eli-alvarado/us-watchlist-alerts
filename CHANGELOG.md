@@ -1,8 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-10-15
 
-- Heartbeat demo framing: lead with “same 3 important moves; 58 duplicate pings avoided.” Audit of the 61 without-skill pings (3 first + 50 regular repeats + 6 after-hours + 2 Saturday). Skill missed none. Timeline image + replay stdout match that wording.
+Pre-launch hardening. Still no auto-trade.
+
+- **Fresh-install friction:** `watchlist.py init` copies the bundled example. `--file` works after the subcommand (`add AAPL --file swing.json`). `alerts.py` / `brief.py` print a hint instead of a silent empty run when the watchlist file is missing. `scripts/quickstart.py` is a one-command fixture demo after `npx skills add`. Offline `examples/quotes-fixture.json` ships inside each skill folder.
+- **Hero GIF** (`docs/hero.gif`, ~15s, labeled fixture / replayed) plus a How-it-works mermaid and FAQ (cost, never trades, privacy, data sources). [SECURITY.md](SECURITY.md) covers API keys and notify URLs.
+- **Scheduled live snapshot** (`.github/workflows/live.yml`): sample watchlist on weekdays, session-aware, no secrets. Job summary every run; **at most one** `docs/live/YYYY-MM-DD.md` commit per ET trading day.
+- README SEO: title and lede use “US stock watchlist”, “price alerts”, “Claude Code / Cursor / Codex”, “no API key”, “NYSE”.
+- Heartbeat framing from Unreleased: same 3 important moves; 58 duplicate pings avoided.
 
 ## 0.3.3 — 2026-10-15
 

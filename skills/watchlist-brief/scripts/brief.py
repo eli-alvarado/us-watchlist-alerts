@@ -88,6 +88,9 @@ def main(argv=None):
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
     if now.tzinfo is None:
         now = now.replace(tzinfo=mc.ET)
+    if not os.path.exists(a.watchlist):
+        print(wlm.missing_watchlist_hint(a.watchlist), file=sys.stderr)
+        return 2
     try:
         mc.refresh_official_calendar(now.year)
     except Exception as e:
@@ -97,6 +100,7 @@ def main(argv=None):
         try: quotes[t["symbol"]] = qt.get_quote(t["symbol"], a.provider, a.fixture)
         except Exception as e: quotes[t["symbol"]] = {"error": str(e)}
     print(render(wl, quotes, a.kind, now))
+    return 0
 
 
 if __name__ == "__main__":

@@ -1,7 +1,10 @@
 """Watchlist CRUD. Stores JSON (default) or YAML (if PyYAML installed and path ends .yaml/.yml).
 
-python scripts/watchlist.py [--file watchlist.json] add NVDA --thesis "AI capex" --entry 120 \
+python scripts/watchlist.py init
+python scripts/watchlist.py add NVDA --thesis "AI capex" --entry 120 \
     --target 150 --target 180 --stop 105 --tag ai --tag semis --alert "price_below:110"
+python scripts/watchlist.py --file swing.json add NVDA --alert price_below:110
+python scripts/watchlist.py add NVDA --file swing.json --alert price_below:110
 python scripts/watchlist.py list [--tag ai]
 python scripts/watchlist.py show NVDA
 python scripts/watchlist.py update NVDA --stop 110
@@ -9,7 +12,7 @@ python scripts/watchlist.py remove NVDA
 python scripts/watchlist.py validate
 """
 from __future__ import annotations
-import argparse, datetime as dt, json, os, re, sys
+import argparse, datetime as dt, json, os, re, shutil, sys
 
 SCHEMA_VERSION = 1
 SYMBOL_RE = re.compile(r"^[A-Z]{1,5}([.-][A-Z]{1,2})?$")
@@ -25,6 +28,57 @@ DEFAULT_PATH = os.environ.get("WATCHLIST_FILE", "watchlist.json")
 
 
 def _is_yaml(p): return p.endswith((".yaml", ".yml"))
+
+
+def bundled_example():
+    """``examples/watchlist.json`` next to a git clone or a skill copy."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for cand in (
+        os.path.join(os.path.dirname(here), "examples", "watchlist.json"),
+        os.path.join(here, "examples", "watchlist.json"),
+    ):
+        if os.path.exists(cand):
+            return cand
+    return None
+
+
+def bundled_fixture():
+    """Offline quote fixture shipped with the skill / clone."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    for cand in (
+        os.path.join(os.path.dirname(here), "examples", "quotes-fixture.json"),
+        os.path.join(here, "examples", "quotes-fixture.json"),
+        os.path.join(os.path.dirname(here), "tests", "fixtures", "quotes.json"),
+    ):
+        if os.path.exists(cand):
+            return cand
+    return None
+
+
+def missing_watchlist_hint(path):
+    ex = bundled_example()
+    lines = [
+        f"No watchlist at {path}.",
+        "Create one:  python3 scripts/watchlist.py init",
+    ]
+    if ex:
+        lines.append(f"Or pass:     --watchlist {ex}")
+    return "\n".join(lines)
+
+
+def init_file(path=DEFAULT_PATH):
+    """Copy the bundled example (or write an empty valid list) if ``path`` is free."""
+    if os.path.exists(path):
+        raise FileExistsError(f"{path} already exists")
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    src = bundled_example()
+    if src:
+        shutil.copy2(src, path)
+        return path, "copied-example"
+    save({"version": SCHEMA_VERSION, "settings": {}, "tickers": []}, path)
+    return path, "empty"
 
 
 def load(path=DEFAULT_PATH):
@@ -142,7 +196,29 @@ def remove(wl, sym):
     return t
 
 
+def _extract_file(argv):
+    """Allow ``--file`` before or after the subcommand (``add AAPL --file x.json``)."""
+    argv = list(argv if argv is not None else sys.argv[1:])
+    path = None
+    out = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--file", "-f") and i + 1 < len(argv):
+            path = argv[i + 1]
+            i += 2
+            continue
+        if a.startswith("--file="):
+            path = a.split("=", 1)[1]
+            i += 1
+            continue
+        out.append(a)
+        i += 1
+    return out, path
+
+
 def main(argv=None):
+    rest, file_override = _extract_file(argv)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--file", default=DEFAULT_PATH)
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -150,14 +226,26 @@ def main(argv=None):
         p = sp.add_parser(name); p.add_argument("symbol")
         p.add_argument("--thesis"); p.add_argument("--entry", type=float); p.add_argument("--stop", type=float)
         p.add_argument("--target", type=float, action="append", dest="targets")
-        p.add_argument("--tag", action="append", dest="tags"); p.add_argument("--alert", action="append", dest="alerts")
-        p.add_argument("--side", choices=["long", "short", "watch"]); p.add_argument("--notes")
+        p.add_argument("--tag", action="append", dest="tags")
+        p.add_argument("--alert", action="append", dest="alerts")
+        p.add_argument("--side", choices=["long", "short", "watch"])
+        p.add_argument("--notes")
         if name == "update": p.add_argument("--append", action="store_true", help="append tags/alerts/targets")
     p = sp.add_parser("remove"); p.add_argument("symbol")
     p = sp.add_parser("show"); p.add_argument("symbol")
     p = sp.add_parser("list"); p.add_argument("--tag")
     sp.add_parser("validate")
-    a = ap.parse_args(argv)
+    sp.add_parser("init")
+    a = ap.parse_args(rest)
+    if file_override:
+        a.file = file_override
+    if a.cmd == "init":
+        try:
+            path, how = init_file(a.file)
+        except FileExistsError as e:
+            print(e, file=sys.stderr); return 1
+        print(f"wrote {path} ({how})")
+        return 0
     wl = load(a.file)
     if a.cmd in ("add", "update"):
         kw = {k: getattr(a, k) for k in ("thesis", "entry", "stop", "targets", "tags", "side", "notes")}
@@ -167,25 +255,27 @@ def main(argv=None):
             t = (add if a.cmd == "add" else update)(wl, a.symbol, **kw)
         except (ValueError, KeyError) as e:
             print(e, file=sys.stderr); return 1
-        save(wl, a.file); print(json.dumps(t, indent=2))
+        save(wl, a.file); print(json.dumps(t, indent=2)); return 0
     elif a.cmd == "remove":
         try:
             t = remove(wl, a.symbol)
         except KeyError as e:
             print(f"{e.args[0]} not on watchlist", file=sys.stderr); return 1
-        save(wl, a.file); print(f"removed {t['symbol']}")
+        save(wl, a.file); print(f"removed {t['symbol']}"); return 0
     elif a.cmd == "show":
         t = find(wl, a.symbol)
         if not t:
             print(f"{a.symbol.upper()} not on watchlist", file=sys.stderr); return 1
-        print(json.dumps(t, indent=2))
+        print(json.dumps(t, indent=2)); return 0
     elif a.cmd == "list":
         for t in wl["tickers"]:
             if a.tag and a.tag not in t.get("tags", []): continue
             print(f"{t['symbol']:<7} entry={t.get('entry')} stop={t.get('stop')} targets={t.get('targets')} tags={','.join(t.get('tags', []))}  {t.get('thesis','')}")
+        return 0
     elif a.cmd == "validate":
         errs = validate(wl)
         print("OK" if not errs else "\n".join(errs)); return 1 if errs else 0
+    return 0
 
 
 if __name__ == "__main__":

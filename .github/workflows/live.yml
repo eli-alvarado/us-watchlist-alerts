@@ -1,0 +1,40 @@
+name: Live snapshot
+
+# Market-day public check. No secrets. At most one docs/live/YYYY-MM-DD.md per ET day.
+on:
+  schedule:
+    # 16:20 ET during EDT (UTC-4) and EST (UTC-5). Script no-ops if the file exists.
+    - cron: "20 20 * * 1-5"
+    - cron: "20 21 * * 1-5"
+    # Morning peek so a failed close run still has a chance the same day.
+    - cron: "45 13 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: live-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    name: Sample watchlist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run session-aware snapshot
+        id: snap
+        run: python3 scripts/live_snapshot.py --watchlist examples/live-watchlist.json --out docs/live
+      - name: Commit at most one file per ET day
+        if: steps.snap.outputs.commit_path != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${{ steps.snap.outputs.commit_path }}"
+          git diff --cached --quiet && exit 0
+          git commit -m "docs(live): daily snapshot"
+          git push
