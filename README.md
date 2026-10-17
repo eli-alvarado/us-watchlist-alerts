@@ -1,6 +1,6 @@
 # US Stock Watchlist & Price Alerts for Claude Code, Cursor, and Codex
 
-[![CI](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml/badge.svg)](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml)
+[![CI](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml/badge.svg)](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml) [![Bluesky](https://img.shields.io/badge/Bluesky-follow-0285FF?logo=bluesky&logoColor=white)](https://bsky.app/profile/uswatchlist.bsky.social)
 
 **US stock watchlist**, **price alerts**, and **NYSE market-hours** checks for Claude Code, Cursor, Codex, Gemini CLI, and any agent that reads `SKILL.md`. Track tickers with a thesis, entry, targets, and stop. Get de-duplicated alerts on price levels, daily % moves, gaps, 52-week highs and lows, moving-average crosses, RSI, ATM IV, volume spikes, intraday range, and earnings — then a morning or close brief. **No API key and no MCP required.** Default path is Python 3 stdlib + the unofficial Yahoo Finance chart. Optional: `yfinance`, Alpaca, Finnhub, Alpha Vantage.
 
