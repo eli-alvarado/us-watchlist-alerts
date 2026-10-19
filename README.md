@@ -1,8 +1,10 @@
-# US Stock Watchlist & Price Alerts for Claude Code, Cursor, and Codex
+# US Stock Watchlist & Price Alerts: Agent Skills for Claude Code, Codex, Gemini CLI, and Cursor
 
 [![CI](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml/badge.svg)](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml) [![Bluesky](https://img.shields.io/badge/Bluesky-follow-0285FF?logo=bluesky&logoColor=white)](https://bsky.app/profile/uswatchlist.bsky.social)
 
-**US stock watchlist**, **price alerts**, and **NYSE market-hours** checks for Claude Code, Cursor, Codex, Gemini CLI, and any agent that reads `SKILL.md`. Track tickers with a thesis, entry, targets, and stop. Get de-duplicated alerts on price levels, daily % moves, gaps, 52-week highs and lows, moving-average crosses, RSI, ATM IV, volume spikes, intraday range, and earnings — then a morning or close brief. **No API key and no MCP required.** Default path is Python 3 stdlib + the unofficial Yahoo Finance chart. Optional: `yfinance`, Alpaca, Finnhub, Alpha Vantage.
+**Featured in:** [awesome-gemini-cli](https://github.com/Piebald-AI/awesome-gemini-cli)
+
+Free, open-source **agent skills** (`SKILL.md` format) for a **US stock watchlist**, **stock price alerts**, a **daily market brief**, and **price charts**, with alerts that know **NYSE market hours and holidays**. Works in Claude Code, Codex, Gemini CLI, Cursor, and any agent that reads `SKILL.md`. Track tickers with a thesis, entry, targets, and stop. Get de-duplicated alerts on price levels, daily % moves, gaps, 52-week highs and lows, moving-average crosses, RSI, ATM IV, volume spikes, intraday range, and earnings, then a morning or close brief. **No API key and no MCP required.** Default path is Python 3 stdlib + the unofficial Yahoo Finance chart. Optional: `yfinance`, Alpaca, Finnhub, Alpha Vantage.
 
 > **Not financial advice.** These skills **never place, modify, or cancel a trade**. Free quotes may be delayed ~15 minutes. Use at your own risk.
 
