@@ -1537,6 +1537,234 @@ class Journeys(unittest.TestCase):
             self.assertEqual(nxt["alerts"], [], ts)
 
 
+class CliUx(unittest.TestCase):
+    """P1 / cheap P2 from the 2026-10-20 QA report."""
+
+    def test_watchlist_provider_env_reaches_alerts(self):
+        seen = []
+        def fake(sym, provider="auto", fixture=None, **kw):
+            seen.append(provider)
+            raise qt.QuoteError("alpaca", "ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY are not set")
+        env = {"WATCHLIST_PROVIDER": "alpaca", "ALPACA_API_KEY_ID": "", "ALPACA_API_SECRET_KEY": ""}
+        with mock.patch.dict(os.environ, env, clear=False), \
+             mock.patch.object(alerts.qt, "get_quote", side_effect=fake), \
+             mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+            rc = alerts.main(["--watchlist", WL, "--dry-run", "--now", "2026-10-15T10:00:00-04:00"])
+        self.assertTrue(seen)
+        self.assertEqual(seen[0], "alpaca")
+        self.assertEqual(rc, 3)
+
+    def test_all_quotes_failed_exits_3(self):
+        def boom(*a, **k):
+            raise RuntimeError("feed down")
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(alerts.qt, "get_quote", side_effect=boom), \
+             mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = alerts.main(["--watchlist", WL, "--dry-run", "--now", "2026-10-15T10:00:00-04:00"])
+        self.assertEqual(rc, 3)
+        self.assertIn("ERROR no quotes", err.getvalue())
+        self.assertNotIn("no new alerts", out.getvalue())
+
+    def test_empty_watchlist_hint(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        self.assertEqual(wlm.main(["init", "--file", path]), 0)
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = alerts.main(["--watchlist", path, "--now", "2026-10-15T10:00:00-04:00"])
+        self.assertEqual(rc, 0)
+        self.assertIn("Watchlist is empty", out.getvalue())
+        self.assertIn("watchlist.py add", out.getvalue())
+        self.assertNotIn("no new alerts", out.getvalue())
+        bout = io.StringIO()
+        with mock.patch("sys.stdout", bout), mock.patch("sys.stderr", io.StringIO()):
+            self.assertEqual(brief.main(["--watchlist", path, "--kind", "morning"]), 0)
+        self.assertIn("Watchlist is empty", bout.getvalue())
+
+    def test_unknown_symbol_is_short_no_alpaca_hint(self):
+        def yahoo_404(symbol):
+            raise qt.QuoteError("yahoo", '{"finance":{"error":{"code":"Not Found"}}}', status=404,
+                                hint="unknown symbol or endpoint")
+        with mock.patch.object(qt, "auto_order", return_value=["yahoo"]), \
+             mock.patch.dict(qt.PROVIDERS, {"yahoo": yahoo_404}):
+            with self.assertRaises(qt.QuoteError) as cm:
+                qt.get_quote("ZZZZ")
+        msg = str(cm.exception)
+        self.assertIn("ZZZZ: unknown symbol", msg)
+        self.assertNotIn("ALPACA", msg)
+        self.assertLess(len(msg), 120)
+
+    def test_provider_key_missing_hint_is_specific(self):
+        with mock.patch.dict(os.environ, {"FINNHUB_API_KEY": ""}, clear=False):
+            with self.assertRaises(qt.QuoteError) as cm:
+                qt.get_quote("AAPL", provider="finnhub")
+        msg = str(cm.exception)
+        self.assertIn("FINNHUB_API_KEY", msg)
+        self.assertNotIn("WATCHLIST_PROVIDER=yahoo", msg)
+
+    def test_watchlist_cli_friendly_errors(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        self.assertEqual(wlm.main(["init", "--file", path]), 0)
+        cases = [
+            (["add", "123", "--file", path], "bad symbol"),
+            (["add", "TOOLONGX", "--file", path], "bad symbol"),
+            (["add", "AMD", "--alert", "bogus_type:1", "--file", path], "unknown alert type"),
+            (["add", "AMD", "--alert", "price_below:abc", "--file", path], "must be a number"),
+            (["add", "AMD", "--stop", "200", "--entry", "100", "--file", path], "stop"),
+        ]
+        for argv, needle in cases:
+            err = io.StringIO()
+            with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+                rc = wlm.main(argv)
+            self.assertEqual(rc, 1, argv)
+            self.assertIn(needle, err.getvalue().lower(), argv)
+            self.assertNotIn("Traceback", err.getvalue(), argv)
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = wlm.main(["update", "ZZZ", "--stop", "1", "--file", path])
+        self.assertEqual(rc, 1)
+        self.assertIn("ZZZ not on watchlist", err.getvalue())
+        self.assertNotIn("'ZZZ'", err.getvalue())
+
+    def test_malformed_json_message(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        with open(path, "w") as f:
+            f.write("{bad")
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = wlm.main(["list", "--file", path])
+        self.assertEqual(rc, 1)
+        self.assertIn("not valid JSON", err.getvalue())
+        self.assertIn("line ", err.getvalue())
+        with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(alerts.main(["--watchlist", path]), 1)
+
+    def test_yaml_without_pyyaml_cleans_tmp(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "w.yaml")
+        real_import = __import__
+        def fake(name, *a, **k):
+            if name == "yaml":
+                raise ImportError("No module named yaml")
+            return real_import(name, *a, **k)
+        err = io.StringIO()
+        with mock.patch("builtins.__import__", side_effect=fake), \
+             mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = wlm.main(["add", "AMD", "--file", path])
+        self.assertEqual(rc, 1)
+        self.assertIn("pyyaml", err.getvalue().lower())
+        self.assertFalse(os.path.exists(path + ".tmp"))
+
+    def test_add_creates_parent_dirs(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "new", "sub", "x.json")
+        with mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(wlm.main(["add", "AMD", "--file", path]), 0)
+        self.assertTrue(os.path.isfile(path))
+
+    def test_chart_unknown_ticker_one_line(self):
+        err = io.StringIO()
+        with mock.patch.object(chart.qt, "get_quote", side_effect=qt.QuoteError("yahoo", "ZZZZ: unknown symbol (not found on yahoo)", bare=True)), \
+             mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = chart.main(["ZZZZ"])
+        self.assertEqual(rc, 1)
+        self.assertIn("error:", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+        err2 = io.StringIO()
+        with mock.patch("sys.stderr", err2), mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(chart.main(["AAPL", "--sma", "abc"]), 1)
+        self.assertIn("--sma", err2.getvalue())
+
+    def test_chart_sma_not_enough_history_omitted(self):
+        q = {"symbol": "AAPL", "price": 10, "prev_close": 9, "closes": list(range(60)), "source": "fixture"}
+        with mock.patch.object(chart.qt, "get_quote", return_value=q):
+            text = chart.render("AAPL", sma_ns=[20, 500])["text"]
+        self.assertIn("sma20", text)
+        self.assertNotIn("sma500=+", text)
+        self.assertIn("not enough history", text)
+
+    def test_now_accepts_zulu_and_rejects_garbage(self):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = alerts.main(["--watchlist", WL, "--fixture", FX, "--dry-run",
+                              "--now", "2026-10-15T15:00:00Z"])
+        self.assertEqual(rc, 0, err.getvalue())
+        err2 = io.StringIO()
+        with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", err2):
+            self.assertEqual(alerts.main(["--watchlist", WL, "--now", "garbage"]), 1)
+        self.assertIn("invalid --now", err2.getvalue())
+        self.assertNotIn("Traceback", err2.getvalue())
+
+    def test_market_calendar_cli_date(self):
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            self.assertEqual(mc.main(["2026-11-26"]), 0)
+        self.assertIn("2026-11-26", out.getvalue())
+        self.assertIn("session=closed", out.getvalue())
+        with mock.patch("sys.stdout", io.StringIO()), self.assertRaises(SystemExit) as cm:
+            mc.main(["--help"])
+        self.assertEqual(cm.exception.code, 0)
+
+    def test_bundle_help_does_not_run(self):
+        import bundle_skills as bs
+        with mock.patch.object(bs, "bundle") as b, self.assertRaises(SystemExit) as cm:
+            bs.main(["--help"])
+        self.assertEqual(cm.exception.code, 0)
+        b.assert_not_called()
+
+    def test_dotenv_merge_quotes_ampersand(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, ".env")
+        with open(path, "w") as f:
+            f.write("UNRELATED=keep\n")
+        env = {"WATCHLIST_NOTIFY": "webhook", "WATCHLIST_WEBHOOK_URL": "https://x.test/hook?a=1&b=2"}
+        with mock.patch.dict(os.environ, env, clear=False):
+            self.assertTrue(sched.merge_dotenv(path))
+        with open(path) as f:
+            text = f.read()
+        self.assertIn("UNRELATED=", text)
+        self.assertIn("WATCHLIST_NOTIFY=", text)
+        self.assertIn("WATCHLIST_WEBHOOK_URL=", text)
+        self.assertIn("&", text)
+        self.assertTrue("'" in text or '"' in text)
+
+    def test_windows_tr_quotes_spaces(self):
+        cmd = sched.windows_task_cmd(
+            r"C:\Program Files\repo", r"C:\Program Files\Python\python.exe",
+            watchlist=r"C:\Users\Me\My Data\watchlist.json",
+            state=r"C:\Users\Me\My Data\.alert_state.json",
+        )
+        self.assertIn("cd /d", cmd)
+        self.assertIn("Program Files", cmd)
+        self.assertIn('\\"', cmd)
+
+    def test_added_date_is_et(self):
+        wl = {"version": 1, "settings": {}, "tickers": []}
+        t = wlm.add(wl, "AMD")
+        self.assertEqual(t["added"], wlm._today_et().isoformat())
+        self.assertRegex(t["added"], r"^\d{4}-\d{2}-\d{2}$")
+
+    def test_brief_kind_defaults_by_session(self):
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            brief.main(["--watchlist", WL, "--fixture", FX, "--now", "2026-10-15T10:55:00-04:00"])
+        self.assertIn("intraday brief", out.getvalue())
+
+    def test_installed_skills_do_not_point_at_unshipped_docs(self):
+        for skill in ("price-alerts", "watchlist-manager", "watchlist-brief"):
+            path = os.path.join(ROOT, "skills", skill, "SKILL.md")
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            self.assertNotIn("`docs/LIMITATIONS.md`", text, skill)
+            self.assertNotIn("`HEARTBEAT.md`", text, skill)
+            self.assertNotIn("See README for env", text, skill)
+            self.assertNotIn("python scripts/", text, skill)
+            if "LIMITATIONS.md" in text:
+                self.assertIn("github.com/eli-alvarado/us-watchlist-alerts", text, skill)
+
+
 if __name__ == "__main__":
     unittest.main()
 

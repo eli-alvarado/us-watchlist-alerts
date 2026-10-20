@@ -212,12 +212,18 @@ def load(path=None):
         path = default_watchlist_path()
     if not os.path.exists(path):
         return {"version": SCHEMA_VERSION, "settings": {}, "tickers": []}
-    with open(path) as f:
-        if _is_yaml(path):
-            import yaml
-            data = yaml.safe_load(f) or {}
-        else:
-            data = json.load(f)
+    try:
+        with open(path) as f:
+            if _is_yaml(path):
+                try:
+                    import yaml
+                except ImportError as e:
+                    raise ImportError("pip install pyyaml or use .json") from e
+                data = yaml.safe_load(f) or {}
+            else:
+                data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"{path} is not valid JSON (line {e.lineno} col {e.colno})") from e
     if not isinstance(data, dict):
         raise ValueError("watchlist root must be an object")
     data.setdefault("version", SCHEMA_VERSION)
@@ -236,21 +242,37 @@ def save(wl, path=None):
     if parent:
         os.makedirs(parent, exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        if _is_yaml(path):
-            import yaml
-            yaml.safe_dump(wl, f, sort_keys=False)
-        else:
-            json.dump(wl, f, indent=2); f.write("\n")
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "w") as f:
+            if _is_yaml(path):
+                try:
+                    import yaml
+                except ImportError as e:
+                    raise ImportError("pip install pyyaml or use .json") from e
+                yaml.safe_dump(wl, f, sort_keys=False)
+            else:
+                json.dump(wl, f, indent=2); f.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def parse_alert(s):
     """'price_below:110' -> {'type':'price_below','value':110.0}; 'golden_cross' -> {'type':...}"""
     t, _, v = s.partition(":")
-    a = {"type": t.strip()}
+    t = t.strip()
+    if t not in ALERT_TYPES:
+        raise ValueError(f"unknown alert type {t!r}")
+    a = {"type": t}
     if v:
-        a["value"] = float(v)
+        try:
+            a["value"] = float(v)
+        except ValueError:
+            raise ValueError(f"alert {t} value must be a number, not {v!r}") from None
     return a
 
 
@@ -297,11 +319,21 @@ def find(wl, sym):
     return next((t for t in wl["tickers"] if t["symbol"] == sym), None)
 
 
+def _today_et():
+    try:
+        from zoneinfo import ZoneInfo
+        return dt.datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:
+        return dt.date.today()
+
+
 def add(wl, sym, **kw):
     sym = sym.upper()
+    if not SYMBOL_RE.match(sym):
+        raise ValueError(f"bad symbol {sym!r}")
     if find(wl, sym):
         raise ValueError(f"{sym} already on watchlist; use update")
-    t = {"symbol": sym, "added": dt.date.today().isoformat(), "side": kw.get("side") or "long",
+    t = {"symbol": sym, "added": _today_et().isoformat(), "side": kw.get("side") or "long",
          "thesis": kw.get("thesis") or "", "entry": kw.get("entry"), "targets": kw.get("targets") or [],
          "stop": kw.get("stop"), "tags": kw.get("tags") or [], "alerts": kw.get("alerts") or [],
          "notes": kw.get("notes") or ""}
@@ -318,7 +350,7 @@ def update(wl, sym, **kw):
             t[k] = (t.get(k) or []) + v
         elif k != "append":
             t[k] = v
-    t["updated"] = dt.date.today().isoformat()
+    t["updated"] = _today_et().isoformat()
     return t
 
 
@@ -393,36 +425,35 @@ def main(argv=None):
         else:
             print(f"wrote {path} (empty)")
         return 0
-    wl = load(a.file)
-    if a.cmd in ("add", "update"):
-        kw = {k: getattr(a, k) for k in ("thesis", "entry", "stop", "targets", "tags", "side", "notes")}
-        kw["alerts"] = [parse_alert(x) for x in (a.alerts or [])]
-        if a.cmd == "update": kw["append"] = a.append
-        try:
+    try:
+        wl = load(a.file)
+        if a.cmd in ("add", "update"):
+            kw = {k: getattr(a, k) for k in ("thesis", "entry", "stop", "targets", "tags", "side", "notes")}
+            kw["alerts"] = [parse_alert(x) for x in (a.alerts or [])]
+            if a.cmd == "update": kw["append"] = a.append
             t = (add if a.cmd == "add" else update)(wl, a.symbol, **kw)
-        except (ValueError, KeyError) as e:
-            print(e, file=sys.stderr); return 1
-        save(wl, a.file); print(json.dumps(t, indent=2)); return 0
-    elif a.cmd == "remove":
-        try:
+            save(wl, a.file); print(json.dumps(t, indent=2)); return 0
+        elif a.cmd == "remove":
             t = remove(wl, a.symbol)
-        except KeyError as e:
-            print(f"{e.args[0]} not on watchlist", file=sys.stderr); return 1
-        save(wl, a.file); print(f"removed {t['symbol']}"); return 0
-    elif a.cmd == "show":
-        t = find(wl, a.symbol)
-        if not t:
-            print(f"{a.symbol.upper()} not on watchlist", file=sys.stderr); return 1
-        print(json.dumps(t, indent=2)); return 0
-    elif a.cmd == "list":
-        for t in wl["tickers"]:
-            if a.tag and a.tag not in t.get("tags", []): continue
-            print(f"{t['symbol']:<7} entry={t.get('entry')} stop={t.get('stop')} targets={t.get('targets')} tags={','.join(t.get('tags', []))}  {t.get('thesis','')}")
+            save(wl, a.file); print(f"removed {t['symbol']}"); return 0
+        elif a.cmd == "show":
+            t = find(wl, a.symbol)
+            if not t:
+                print(f"{a.symbol.upper()} not on watchlist", file=sys.stderr); return 1
+            print(json.dumps(t, indent=2)); return 0
+        elif a.cmd == "list":
+            for t in wl["tickers"]:
+                if a.tag and a.tag not in t.get("tags", []): continue
+                print(f"{t['symbol']:<7} entry={t.get('entry')} stop={t.get('stop')} targets={t.get('targets')} tags={','.join(t.get('tags', []))}  {t.get('thesis','')}")
+            return 0
+        elif a.cmd == "validate":
+            errs = validate(wl)
+            print("OK" if not errs else "\n".join(errs)); return 1 if errs else 0
         return 0
-    elif a.cmd == "validate":
-        errs = validate(wl)
-        print("OK" if not errs else "\n".join(errs)); return 1 if errs else 0
-    return 0
+    except KeyError as e:
+        print(f"{e.args[0]} not on watchlist", file=sys.stderr); return 1
+    except (ValueError, OSError, json.JSONDecodeError, ImportError) as e:
+        print(f"error: {e}", file=sys.stderr); return 1
 
 
 if __name__ == "__main__":

@@ -4,7 +4,9 @@ python scripts/alerts.py --watchlist watchlist.json --state .alert_state.json [-
        [--now 2026-10-15T10:00:00-04:00] [--force-session] [--dry-run] [--format json|text]
        [--notify [ntfy,slack,webhook,desktop,file]]
 
-Exit code 0 always on success; output lists only NEW alerts (already-fired ones in cooldown are suppressed).
+Exit 0 on success (including empty / no new alerts). Exit 2 if the watchlist file is missing.
+Exit 3 if every ticker failed to quote (a total feed outage is not "no new alerts").
+Output lists only NEW alerts (already-fired ones in cooldown are suppressed).
 """
 from __future__ import annotations
 import argparse, datetime as dt, json, os, sys
@@ -293,7 +295,7 @@ def main(argv=None):
                     help="watchlist path (default: $WATCHLIST_FILE or shared user/project location)")
     ap.add_argument("--state", default=None,
                     help="cooldown state path (default: $ALERT_STATE_FILE or next to the watchlist)")
-    ap.add_argument("--fixture"); ap.add_argument("--provider", default="auto")
+    ap.add_argument("--fixture"); ap.add_argument("--provider", default=os.environ.get("WATCHLIST_PROVIDER", "auto"))
     ap.add_argument("--now", help="ISO datetime override (testing)")
     ap.add_argument("--force-session", action="store_true", help="evaluate even outside configured sessions")
     ap.add_argument("--dry-run", action="store_true", help="do not write state")
@@ -308,8 +310,11 @@ def main(argv=None):
         a.watchlist = wlm.default_watchlist_path()
     if not a.state:
         a.state = wlm.default_state_path(a.watchlist)
-    now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
-    if now.tzinfo is None: now = now.replace(tzinfo=mc.ET)
+    try:
+        now = mc.parse_iso(a.now) if a.now else dt.datetime.now(mc.ET)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     if not os.path.exists(a.watchlist):
         print(wlm.missing_watchlist_hint(a.watchlist), file=sys.stderr)
         return 2
@@ -317,7 +322,15 @@ def main(argv=None):
         mc.refresh_official_calendar(now.year)
     except Exception as e:
         print(f"WARN official NYSE overlay skipped: {e}", file=sys.stderr)
-    wl = wlm.load(a.watchlist); state = load_state(a.state)
+    try:
+        wl = wlm.load(a.watchlist)
+    except (ValueError, OSError, json.JSONDecodeError, ImportError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if not wl.get("tickers"):
+        print("Watchlist is empty. Add one: python3 scripts/watchlist.py add NVDA")
+        return 0
+    state = load_state(a.state)
     warn = state.pop("warning", None)
     iv_syms = tickers_with_iv_alerts(wl)
     quotes = {}
@@ -329,6 +342,9 @@ def main(argv=None):
             quotes[t["symbol"]] = q
         except Exception as e:
             quotes[t["symbol"]] = {"error": str(e)}
+    n_tickers = len(wl["tickers"])
+    n_failed = sum(1 for t in wl["tickers"] if (quotes.get(t["symbol"]) or {}).get("error"))
+    total_outage = bool(n_tickers) and n_failed == n_tickers
     for t in wl["tickers"]:
         q = quotes.get(t["symbol"]) or {}
         if q.get("iv_error") and t["symbol"] in iv_syms:
@@ -365,13 +381,15 @@ def main(argv=None):
         else:
             if res.get("last_close"):
                 print(f"[{et:%Y-%m-%d %H:%M} ET] session={res['session']} — market closed, showing last regular close")
-            if not res["alerts"]:
+            if not res["alerts"] and not total_outage:
                 print(f"[{et:%Y-%m-%d %H:%M} ET] no new alerts")
             for x in res["alerts"]:
                 print(f"ALERT {x['message']}")
         if res.get("truncated"):
             print(f"WARN alert cap ({(wl.get('settings') or {}).get('max_alerts_per_run', DEFAULTS['max_alerts_per_run'])}) reached; remaining alerts left unlatched", file=sys.stderr)
         for e in res["errors"]: print(f"WARN {e['symbol']}: {e['error']}", file=sys.stderr)
+        if total_outage:
+            print(f"ERROR no quotes ({n_failed}/{n_tickers} failed)", file=sys.stderr)
         for s in res.get("stale") or []:
             print(f"WARN {s['symbol']}: quote is {s['age_seconds']}s old (as_of {s.get('as_of')}, source={s.get('source')})", file=sys.stderr)
         for n in res.get("notify") or []:
@@ -380,7 +398,9 @@ def main(argv=None):
                 print(f"NOTIFY {n['sink']}{extra}")
             else:
                 print(f"WARN notify {n.get('sink')}: {n.get('error')}", file=sys.stderr)
-    return 0
+    if total_outage and a.format == "json":
+        print(f"ERROR no quotes ({n_failed}/{n_tickers} failed)", file=sys.stderr)
+    return 3 if total_outage else 0
 
 
 if __name__ == "__main__":
