@@ -59,11 +59,11 @@ QUOTE_FIELDS = (
 class QuoteError(RuntimeError):
     """Provider-tagged failure with optional HTTP status and a next-step hint."""
 
-    def __init__(self, provider, message, status=None, hint=None):
+    def __init__(self, provider, message, status=None, hint=None, *, bare=False):
         self.provider = provider
         self.status = status
         self.hint = hint
-        parts = [f"{provider}: {message}"]
+        parts = [message] if bare else [f"{provider}: {message}"]
         if status is not None:
             parts.append(f"HTTP {status}")
         if hint:
@@ -1031,6 +1031,56 @@ def auto_order():
     return order
 
 
+_NOT_FOUND = ("404", "no data found", "unknown symbol", "not found", "no history",
+              "empty quote", "invalid symbol")
+_NETWORK = ("timeout", "timed out", "429", "502", "503", "504", "connection",
+            "refused", "reset", "unreachable", "rate limited", "temporarily")
+
+
+def _looks_unknown_symbol(errors):
+    if not errors:
+        return False
+    blob = " ".join(str(e).lower() for e in errors)
+    if any(tok in blob for tok in _NETWORK):
+        return False
+    return all(any(tok in str(e).lower() for tok in _NOT_FOUND) for e in errors)
+
+
+def _hint_for_failures(provider, errors):
+    blob = " ".join(str(e).lower() for e in errors)
+    if "not set" in blob or "no module" in blob or "modulenotfound" in blob:
+        if "alpaca" in blob:
+            return "set ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY"
+        if "finnhub" in blob:
+            return "set FINNHUB_API_KEY"
+        if "alphavantage" in blob:
+            return "set ALPHAVANTAGE_API_KEY"
+        if "yfinance" in blob:
+            return "pip install yfinance"
+    if any(tok in blob for tok in _NETWORK) or provider == "auto":
+        return "set ALPACA_* keys for the official feed, or WATCHLIST_PROVIDER=yahoo"
+    if provider == "yfinance":
+        return "pip install yfinance"
+    if provider == "finnhub":
+        return "set FINNHUB_API_KEY"
+    if provider == "alphavantage":
+        return "set ALPHAVANTAGE_API_KEY"
+    if provider == "alpaca":
+        return "set ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY"
+    return None
+
+
+def _quote_failure(symbol, provider, errors):
+    sym = (symbol or "").upper()
+    if _looks_unknown_symbol(errors):
+        src = "yahoo" if provider in ("auto", "yahoo") else provider
+        return QuoteError(src, f"{sym}: unknown symbol (not found on {src})", bare=True)
+    hint = _hint_for_failures(provider, errors)
+    return QuoteError("auto" if provider == "auto" else provider,
+                      f"all providers failed for {symbol}: " + "; ".join(errors),
+                      hint=hint)
+
+
 def get_quote(symbol, provider="auto", fixture=None, fetch_earnings=True):
     if fixture:
         return from_fixture(symbol, fixture)
@@ -1048,9 +1098,7 @@ def get_quote(symbol, provider="auto", fixture=None, fetch_earnings=True):
         except Exception as e:
             errors.append(str(e) if str(e).startswith(f"{p}:") else f"{p}: {e}")
     if q is None:
-        raise QuoteError("auto" if provider == "auto" else provider,
-                         f"all providers failed for {symbol}: " + "; ".join(errors),
-                         hint="set ALPACA_* keys for the official feed, or WATCHLIST_PROVIDER=yahoo")
+        raise _quote_failure(symbol, provider, errors)
     if fetch_earnings and not q.get("earnings_date"):
         earn_errs = []
         ed, src = lookup_earnings(symbol, errors_out=earn_errs)

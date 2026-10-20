@@ -84,9 +84,9 @@ Force one with `--provider` or `WATCHLIST_PROVIDER`. HTTP 429/5xx are retried; f
 
 **ATM IV:** only fetched for tickers with `iv_above`/`iv_below`. Unofficial Yahoo options chain (same crumb), then yfinance if installed. Nearest expiration, ATM call/put average as percent. Not IV rank. Failures set `iv_error` and print a WARN. `python3 scripts/quotes.py AAPL --iv` to inspect.
 
-**Notify (optional):** `WATCHLIST_NOTIFY=ntfy,slack,webhook,desktop,file` and/or `--notify`. See README for env vars. Do not notify on empty/skipped/dry-run. Delivery errors stay warnings.
+**Notify (optional):** `WATCHLIST_NOTIFY=ntfy,slack,webhook,desktop,file` and/or `--notify`. Env vars: https://github.com/eli-alvarado/us-watchlist-alerts/blob/main/README.md#configuration . Do not notify on empty/skipped/dry-run. Delivery errors stay warnings.
 
-**Known limits:** unscheduled closures live in `data/holidays_overrides.json` (incomplete) plus env/settings plus an optional Alpaca official calendar overlay (day-cached). Yahoo endpoints are unofficial. See `docs/LIMITATIONS.md`.
+**Known limits:** unscheduled closures live in `data/holidays_overrides.json` (incomplete) plus env/settings plus an optional Alpaca official calendar overlay (day-cached). Yahoo endpoints are unofficial. https://github.com/eli-alvarado/us-watchlist-alerts/blob/main/docs/LIMITATIONS.md
 
 **MCP option:** if an `alpaca` MCP server (alpacahq/alpaca-mcp-server) or `tradingview` MCP (atilaahmettaner/tradingview-mcp) is connected, you may use it for quotes/indicators instead of the scripts, then apply the exact same rules and anti-spam logic (read/write `.alert_state.json` in the same format). Use broker MCPs for **read-only** calls only.
 
@@ -97,7 +97,7 @@ Force one with `--provider` or `WATCHLIST_PROVIDER`. HTTP 429/5xx are retried; f
 - TSLA down -6.0% today, gapped down -5.0%, volume 3.0x avg
 - TSLA reports earnings in 1 day (2026-10-16)
 ```
-Group by ticker, include the stored thesis/stop/target for context, no recommendations. If no alerts: one short line, or stay silent when running on a heartbeat (see `HEARTBEAT.md`).
+Group by ticker, include the stored thesis/stop/target for context, no recommendations. If no alerts: one short line, or stay silent when running on a heartbeat (https://github.com/eli-alvarado/us-watchlist-alerts/blob/main/HEARTBEAT.md).
 
 ## Creating alerts from chat
-"Alert me if AAPL drops below 200" -> `python scripts/watchlist.py update AAPL --alert price_below:200 --append` (add the ticker first if missing). Confirm the rule back in plain English.
+"Alert me if AAPL drops below 200" -> `python3 scripts/watchlist.py update AAPL --alert price_below:200 --append` (add the ticker first if missing). Confirm the rule back in plain English.

@@ -36,7 +36,7 @@ Shared with `price-alerts` and `watchlist-brief`. Survives `npx skills add` rein
   }]
 }
 ```
-Alert `type` values and their `value` meaning are documented in `skills/price-alerts/SKILL.md`.
+Alert `type` values and their `value` meaning are documented in `../price-alerts/SKILL.md` (sibling skill after install).
 A `stop` implies a `stop_hit` alert and `targets` imply `target_hit` automatically.
 
 ## Operations (prefer the script; it validates and writes atomically)
@@ -46,18 +46,18 @@ python3 scripts/watchlist.py init
 python3 scripts/watchlist.py init --example
 python3 scripts/watchlist.py add NVDA --thesis "AI capex" --entry 160 --target 190 --target 220 --stop 140 --tag ai --tag semis --alert price_below:150
 python3 scripts/watchlist.py add NVDA --file swing.json --alert price_below:150
-python scripts/watchlist.py update NVDA --stop 145
-python scripts/watchlist.py update NVDA --tag megacap --alert rsi_above:75 --append
-python scripts/watchlist.py remove NVDA
-python scripts/watchlist.py list [--tag semis]
-python scripts/watchlist.py show NVDA
-python scripts/watchlist.py validate
+python3 scripts/watchlist.py update NVDA --stop 145
+python3 scripts/watchlist.py update NVDA --tag megacap --alert rsi_above:75 --append
+python3 scripts/watchlist.py remove NVDA
+python3 scripts/watchlist.py list [--tag semis]
+python3 scripts/watchlist.py show NVDA
+python3 scripts/watchlist.py validate
 ```
 If Python is unavailable, edit the JSON by hand following the schema and the validation rules below.
 
 ## Workflow
 1. **Resolve the ticker.** Uppercase it. If the user gives a company name, confirm the symbol (e.g. "Alphabet" -> GOOGL or GOOG?). Reject non-US listings or say they are unsupported by default data.
-2. **Sanity-check with a live quote**: `python scripts/quotes.py NVDA`. If the user's stop is above price for a long (or target below), point it out and ask.
+2. **Sanity-check with a live quote**: `python3 scripts/quotes.py NVDA`. If the user's stop is above price for a long (or target below), point it out and ask.
 3. **Capture the why.** If no thesis is given, ask once for a one-line reason; store `""` if they decline. Don't invent a thesis.
 4. **Suggest, don't impose, alerts.** Reasonable defaults to offer: stop/target levels, `earnings_within: 3`, `pct_move: 5` (last vs prior close). If they want a drop that trades through a % and then recovers, offer opt-in `intraday_low_pct` / `intraday_extreme_pct` and say those use session low/high, not last. Mention `iv_above`/`intraday_range_pct` only if they ask about vol or today's range — ATM IV is unofficial Yahoo, not IV rank. Only add what they agree to.
 5. **Write, validate, confirm.** Show the resulting entry (symbol, entry, stop, targets, alerts) in one compact line.

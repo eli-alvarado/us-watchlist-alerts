@@ -123,14 +123,57 @@ def redact_env(key, value):
     return value
 
 
-def dotenv_payload():
+def parse_dotenv(path):
+    data = {}
+    if not path or not os.path.isfile(path):
+        return data
+    with open(path) as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            k, v = k.strip(), v.strip().strip("'").strip('"')
+            if k:
+                data[k] = v
+    return data
+
+
+def write_dotenv(path, data):
     lines = ["# us-watchlist-alerts — gitignored. Sourced by the weekday cron job.",
              "# Never places trades."]
+    seen = set()
+    for k in ENV_KEYS:
+        v = (data.get(k) or "").strip()
+        if v:
+            lines.append(f"{k}={shlex.quote(v)}")
+            seen.add(k)
+    for k, v in data.items():
+        if k in seen or not str(v).strip():
+            continue
+        lines.append(f"{k}={shlex.quote(str(v))}")
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
+def merge_dotenv(path):
+    """Merge current notify/path env into ``path``, quoting values for ``sh``."""
+    data = parse_dotenv(path)
+    before = dict(data)
     for k in ENV_KEYS:
         v = (os.environ.get(k) or "").strip()
         if v:
-            lines.append(f"{k}={v}")
-    return "\n".join(lines) + "\n"
+            data[k] = v
+    if not data:
+        return False
+    if data == before and os.path.isfile(path):
+        return False
+    write_dotenv(path, data)
+    return True
 
 
 def read_crontab():
@@ -227,13 +270,9 @@ def run(action="install", dry_run=False, root=ROOT, python=None, platform=None,
             return 1, lines
         existing = read_crontab()
         write_crontab(merge_crontab(existing, root=root, python=python, watchlist=wl, state=st))
-        if not os.path.isfile(env_file):
-            payload = dotenv_payload()
-            if "WATCHLIST_NOTIFY=" in payload:
-                os.makedirs(os.path.dirname(env_file) or ".", exist_ok=True)
-                with open(env_file, "w") as f:
-                    f.write(payload)
-                lines.append(f"Wrote {env_file} (gitignored) from the current environment.")
+        existed = os.path.isfile(env_file)
+        if merge_dotenv(env_file):
+            lines.append(f"{'Updated' if existed else 'Wrote'} {env_file} (gitignored) from the current environment.")
         lines.append("Installed weekday cron. Log: alerts.log in the working directory.")
 
     results = send_test_ping()

@@ -95,7 +95,7 @@ On a **single** question, a capable agent without the skill is fine — live pri
 | Skill | What it does |
 |---|---|
 | [`watchlist-manager`](skills/watchlist-manager/SKILL.md) | Add, remove, update, list and validate tickers with thesis, entry, targets, stop, tags and alert rules (JSON/YAML schema) |
-| [`price-alerts`](skills/price-alerts/SKILL.md) | 26 alert types, latching, cooldowns, once-per-day events, session gating, NYSE calendar, optional notify sinks |
+| [`price-alerts`](skills/price-alerts/SKILL.md) | 26 alert types + 1 alias (`intraday_extreme_pct`), latching, cooldowns, once-per-day events, session gating, NYSE calendar, optional notify sinks |
 | [`watchlist-brief`](skills/watchlist-brief/SKILL.md) | Morning or close summary: table, movers, distance to stop/target, upcoming earnings; optional `chart.py` (ASCII / PNG) |
 | [`HEARTBEAT.md`](HEARTBEAT.md) | Checklist for a scheduled check that stays silent unless something new happens |
 

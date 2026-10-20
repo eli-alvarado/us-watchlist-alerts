@@ -47,3 +47,10 @@ def price_cross_ma(closes, n):
     if closes[-2] >= prev_ma and closes[-1] < cur_ma:
         return "below"
     return None
+
+
+if __name__ == "__main__":
+    import argparse
+    argparse.ArgumentParser(
+        description="Library module (sma, rsi, ma_cross, price_cross_ma). Import it; there is no quote CLI.",
+    ).parse_args()
