@@ -25,10 +25,123 @@ ALERT_TYPES = {"price_above", "price_below", "pct_change_up", "pct_change_down",
                "intraday_low_pct", "intraday_high_pct", "intraday_extreme_pct"}
 SESSIONS = {"regular", "pre", "after"}
 SIDES = {"long", "short", "watch"}
-DEFAULT_PATH = os.environ.get("WATCHLIST_FILE", "watchlist.json")
+WATCHLIST_BASENAME = "watchlist.json"
+STATE_BASENAME = ".alert_state.json"
+APP_DIRNAME = "us-watchlist-alerts"
 
 
 def _is_yaml(p): return p.endswith((".yaml", ".yml"))
+
+
+def is_skill_install_dir(path):
+    """True if ``path`` looks like an ``npx skills add`` skill folder (wiped on reinstall)."""
+    path = os.path.abspath(path)
+    return (
+        os.path.isfile(os.path.join(path, "SKILL.md"))
+        and os.path.isfile(os.path.join(path, "scripts", "watchlist.py"))
+        and os.path.isfile(os.path.join(path, "scripts", "alerts.py"))
+    )
+
+
+def user_data_dir():
+    """Stable dir shared by all three skills; survives skill reinstall.
+
+    ``$XDG_CONFIG_HOME/us-watchlist-alerts`` if set, else
+    ``~/.config/us-watchlist-alerts`` (Windows: ``%APPDATA%\\us-watchlist-alerts``).
+    Override the files directly with ``WATCHLIST_FILE`` / ``ALERT_STATE_FILE``.
+    """
+    xdg = (os.environ.get("XDG_CONFIG_HOME") or "").strip()
+    if xdg:
+        return os.path.join(os.path.abspath(os.path.expanduser(xdg)), APP_DIRNAME)
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, APP_DIRNAME)
+    return os.path.join(os.path.expanduser("~"), ".config", APP_DIRNAME)
+
+
+def _legacy_skill_files(basename):
+    """In-skill leftover files from the pre-user-config layout."""
+    found, seen = [], set()
+    here = os.path.dirname(os.path.abspath(__file__))
+    skill_or_repo = os.path.dirname(here)
+    candidates = []
+    if is_skill_install_dir(skill_or_repo):
+        parent = os.path.dirname(skill_or_repo)
+        candidates.append(os.path.join(skill_or_repo, basename))
+        for name in ("price-alerts", "watchlist-manager", "watchlist-brief"):
+            candidates.append(os.path.join(parent, name, basename))
+    cwd = os.getcwd()
+    if is_skill_install_dir(cwd):
+        parent = os.path.dirname(cwd)
+        candidates.append(os.path.join(cwd, basename))
+        for name in ("price-alerts", "watchlist-manager", "watchlist-brief"):
+            candidates.append(os.path.join(parent, name, basename))
+    for p in candidates:
+        ap = os.path.abspath(p)
+        if ap in seen or not os.path.isfile(ap):
+            continue
+        seen.add(ap)
+        found.append(ap)
+    return found
+
+
+def _migrate_file(src, dest):
+    parent = os.path.dirname(os.path.abspath(dest))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    if not os.path.exists(dest):
+        shutil.copy2(src, dest)
+    return dest
+
+
+def default_watchlist_path():
+    """Resolve the watchlist path shared by manager / alerts / brief.
+
+    Order:
+    1. ``$WATCHLIST_FILE`` if set
+    2. ``./watchlist.json`` when cwd is a project directory (not a skill folder)
+       and the file already exists — the ``cd <project>`` journey
+    3. ``$XDG_CONFIG_HOME/us-watchlist-alerts/watchlist.json`` (or ``~/.config/...``),
+       after copying a leftover in-skill ``watchlist.json`` if the user file is new
+    4. For a *new* list: ``./watchlist.json`` in a project cwd, else the user-config path
+       (never write into a skill folder that ``npx skills add`` will replace)
+    """
+    env = (os.environ.get("WATCHLIST_FILE") or "").strip()
+    if env:
+        return env
+    cwd = os.getcwd()
+    cwd_file = os.path.join(cwd, WATCHLIST_BASENAME)
+    user_file = os.path.join(user_data_dir(), WATCHLIST_BASENAME)
+    if os.path.isfile(cwd_file) and not is_skill_install_dir(cwd):
+        return cwd_file
+    if os.path.isfile(user_file):
+        return user_file
+    legacy = _legacy_skill_files(WATCHLIST_BASENAME)
+    if legacy:
+        _migrate_file(legacy[0], user_file)
+        src_state = os.path.join(os.path.dirname(legacy[0]), STATE_BASENAME)
+        dest_state = os.path.join(user_data_dir(), STATE_BASENAME)
+        if os.path.isfile(src_state) and not os.path.isfile(dest_state):
+            _migrate_file(src_state, dest_state)
+        return user_file
+    if not is_skill_install_dir(cwd):
+        return cwd_file
+    return user_file
+
+
+def default_state_path(watchlist_path=None):
+    env = (os.environ.get("ALERT_STATE_FILE") or "").strip()
+    if env:
+        return env
+    wl = os.path.abspath(watchlist_path or default_watchlist_path())
+    parent = os.path.dirname(wl)
+    return os.path.join(parent or os.getcwd(), STATE_BASENAME)
+
+
+def __getattr__(name):
+    if name == "DEFAULT_PATH":
+        return default_watchlist_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def bundled_example():
@@ -62,19 +175,23 @@ def missing_watchlist_hint(path):
         f"No watchlist at {path}.",
         "Create one:  python3 scripts/watchlist.py init",
         "Sample data: python3 scripts/watchlist.py init --example",
+        "Defaults: $WATCHLIST_FILE, else ./watchlist.json in a project directory,",
+        f"else {os.path.join(user_data_dir(), WATCHLIST_BASENAME)} (shared, survives skill reinstall).",
     ]
     if ex:
         lines.append(f"Or pass:     --watchlist {ex}")
     return "\n".join(lines)
 
 
-def init_file(path=DEFAULT_PATH, *, example=False, empty=False):
+def init_file(path=None, *, example=False, empty=False):
     """Write an empty valid watchlist, or copy the bundled sample if ``example``.
 
     ``empty`` is accepted for compatibility; empty is already the default.
     """
     if example and empty:
         raise ValueError("pass only one of --example or --empty")
+    if path is None:
+        path = default_watchlist_path()
     if os.path.exists(path):
         raise FileExistsError(f"{path} already exists")
     parent = os.path.dirname(os.path.abspath(path))
@@ -90,7 +207,9 @@ def init_file(path=DEFAULT_PATH, *, example=False, empty=False):
     return path, "empty"
 
 
-def load(path=DEFAULT_PATH):
+def load(path=None):
+    if path is None:
+        path = default_watchlist_path()
     if not os.path.exists(path):
         return {"version": SCHEMA_VERSION, "settings": {}, "tickers": []}
     with open(path) as f:
@@ -107,10 +226,15 @@ def load(path=DEFAULT_PATH):
     return data
 
 
-def save(wl, path=DEFAULT_PATH):
+def save(wl, path=None):
+    if path is None:
+        path = default_watchlist_path()
     errs = validate(wl)
     if errs:
         raise ValueError("; ".join(errs))
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         if _is_yaml(path):
@@ -229,7 +353,9 @@ def _extract_file(argv):
 def main(argv=None):
     rest, file_override = _extract_file(argv)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--file", default=DEFAULT_PATH)
+    ap.add_argument("--file", default=None,
+                    help="watchlist path (default: $WATCHLIST_FILE, else ./watchlist.json "
+                         "in a project dir, else ~/.config/us-watchlist-alerts/watchlist.json)")
     sp = ap.add_subparsers(dest="cmd", required=True)
     for name in ("add", "update"):
         p = sp.add_parser(name); p.add_argument("symbol")
@@ -253,6 +379,8 @@ def main(argv=None):
     a = ap.parse_args(rest)
     if file_override:
         a.file = file_override
+    if not a.file:
+        a.file = default_watchlist_path()
     if a.cmd == "init":
         try:
             path, how = init_file(a.file, example=a.example, empty=a.empty)

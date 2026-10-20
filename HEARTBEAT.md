@@ -17,6 +17,6 @@ No agent session? `python3 scripts/schedule.py` installs weekday cron every 5 mi
    - `notify` entries with `ok: false` -> tell the user once that that sink failed; do not page every tick.
 4. **Brief ticks** - at the morning/close times run the `watchlist-brief` skill instead of (not in addition to) a separate alert message; fold new alerts into the brief.
 5. **Stale data check** - `alerts.py` already emits `stale` when `as_of` is older than `stale_after_seconds` in a regular session; tell the user once. Also, if every quote's price is unchanged for 3 ticks during the regular session, warn once that the data feed may be stale/delayed.
-6. **Housekeeping** - state is updated automatically by `alerts.py`; never delete `.alert_state.json` mid-day (that would re-send alerts). If `alerts.py` prints a state-file warning, tell the user once that duplicates are possible on this run.
+6. **Housekeeping** - state is updated automatically by `alerts.py`; never delete `.alert_state.json` mid-day (that would re-send alerts). Daily events are keyed to the **session date of the last close**, so overnight ticks must not be treated as a new day. If `alerts.py` prints a state-file warning, tell the user once that duplicates are possible on this run. The watchlist lives at `$WATCHLIST_FILE` / the project `./watchlist.json` / `~/.config/us-watchlist-alerts/` — not inside the skill folder.
 
 Hard rules: no trades without explicit per-order user confirmation; no buy/sell advice; at most one notification per tick.

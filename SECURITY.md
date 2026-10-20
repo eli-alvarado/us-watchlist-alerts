@@ -1,15 +1,15 @@
 # Security
 
-This project is a **local watchlist and alerter**. It never places, modifies, or cancels a trade. Treat it like any other script that can reach the network and write files in the working directory.
+This project is a **local watchlist and alerter**. It never places, modifies, or cancels a trade. Treat it like any other script that can reach the network and write files in the project directory or `~/.config/us-watchlist-alerts/`.
 
 ## What we store
 
 | File / env | What it is | Commit it? |
 |---|---|---|
-| `watchlist.json` | Your tickers, thesis, stops, alert rules | Optional (it is your research, not a secret) |
-| `.alert_state.json` | Latch / cooldown state | **No** (already gitignored; can leak what fired) |
+| `watchlist.json` | Your tickers, thesis, stops, alert rules. Default: project `./watchlist.json` or `~/.config/us-watchlist-alerts/watchlist.json` (`$WATCHLIST_FILE` overrides). Shared by all three skills; not inside the skill folder. | Optional (it is your research, not a secret) |
+| `.alert_state.json` | Latch / cooldown state (next to the watchlist; `$ALERT_STATE_FILE` overrides) | **No** (already gitignored; can leak what fired) |
 | `.nyse_calendar_cache.json` | Cached Alpaca calendar | **No** (gitignored) |
-| `.env` | Keys and webhook URLs | **No** (gitignored) |
+| `.env` | Keys and webhook URLs (cron sources this from the data dir) | **No** (gitignored) |
 
 ## API keys and tokens
 

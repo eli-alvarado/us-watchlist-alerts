@@ -39,7 +39,7 @@ export NTFY_TOPIC=my-watchlist          # install the ntfy app and subscribe to 
 python3 scripts/schedule.py             # or: python3 scripts/quickstart.py schedule
 ```
 
-That installs a **weekday** cron job (every 5 minutes, Mon–Fri). `alerts.py` already stays silent on NYSE holidays, weekends, and empty checks, so off-hours ticks do not ping you. `--dry-run` prints the job without installing or sending a test ping. `python3 scripts/schedule.py uninstall` removes it. On Windows the same command **prints** a Task Scheduler line (it does not create the task).
+That installs a **weekday** cron job (every 5 minutes, Mon–Fri) whose working directory is the **watchlist data dir** (project `./` or `~/.config/us-watchlist-alerts/`), not the skill folder. `alerts.py` already stays silent on NYSE holidays, weekends, and empty checks, so off-hours ticks do not ping you. Daily events are de-duplicated by the **session date of the last close**, so a 00:05 run does not re-fire yesterday as “today.” `--dry-run` prints the job without installing or sending a test ping. `python3 scripts/schedule.py uninstall` removes it. On Windows the same command **prints** a Task Scheduler line that `cd`s into that data dir (it does not create the task).
 
 No always-on computer? In a **private fork**, copy [`examples/alerts-cron.yml`](examples/alerts-cron.yml) to `.github/workflows/alerts.yml` and set `NTFY_TOPIC` (or Slack/webhook) as Actions secrets. Do **not** put notify secrets on this public repo — [`.github/workflows/live.yml`](.github/workflows/live.yml) is a no-secrets public snapshot, not your phone.
 
@@ -51,7 +51,7 @@ Never places trades.
 
 **Does it place trades?** No. Every `SKILL.md` and [SECURITY.md](SECURITY.md) say the agent must never place, modify, or cancel an order without your explicit confirmation of that specific order. There is no broker submit path in this repo.
 
-**Where does my data go?** `watchlist.json` and `.alert_state.json` stay on disk in the working directory. Outbound HTTPS is quotes and (if you enable them) notify sinks. Keys belong in the environment, never in the watchlist file. See [SECURITY.md](SECURITY.md).
+**Where does my data go?** `$WATCHLIST_FILE` if set, else `./watchlist.json` in your **project** directory, else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`). Alert state defaults to `.alert_state.json` next to that file. That location is shared by all three skills and is **not** inside the skill folder, so `npx skills add` (reinstall/update) cannot delete it. Outbound HTTPS is quotes and (if you enable them) notify sinks. Keys belong in the environment, never in the watchlist file. See [SECURITY.md](SECURITY.md).
 
 **What data sources?** Default: unofficial Yahoo Finance chart (stdlib). Fallback order and earnings/IV layers: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Quotes may be delayed ~15 minutes. US-listed stocks and ETFs only.
 
@@ -113,21 +113,21 @@ Pick **one** installer line. Bare `-y` is **not** Claude Code — it writes `.ag
 | **Gemini CLI** | `npx skills add eli-alvarado/us-watchlist-alerts -y -a gemini-cli` | `.agents/skills/` |
 | Every agent in this folder | `npx skills add eli-alvarado/us-watchlist-alerts --all` | `.agents/skills/` plus a `.claude/skills/` symlink |
 
-Then `cd` into **that** `price-alerts` folder (next to `SKILL.md`) and run the fixture demo — labeled, no keys:
+Run scripts **from the project root by path** (do not `cd` into the skill folder — `npx skills add` replaces that directory and would delete a watchlist stored there):
 
 ```bash
-cd .claude/skills/price-alerts          # Claude Code
-# cd .agents/skills/price-alerts        # Cursor / Codex / Gemini CLI
-python3 scripts/quickstart.py
-python3 scripts/quotes.py AAPL          # live Yahoo when you want it
+# Claude Code
+python3 .claude/skills/price-alerts/scripts/quickstart.py
+python3 .claude/skills/price-alerts/scripts/quotes.py AAPL
+# Cursor / Codex / Gemini CLI: .agents/skills/price-alerts/scripts/...
 ```
 
-`quickstart.py` still loads the bundled example for the fixture demo (AAPL `price_above: 240`). `watchlist.py init` writes an **empty** list so a first `add NVDA` succeeds. Pass `--example` only if you want the sample book (a live ~$342 AAPL print will fire those fixture-era levels once):
+`quickstart.py` reads the bundled example **in place** for the fixture demo and never writes `watchlist.json`. `watchlist.py init` writes an **empty** list at the shared default path so a first `add NVDA` succeeds. All three skills use the same file: `$WATCHLIST_FILE`, else `./watchlist.json` in this project, else `~/.config/us-watchlist-alerts/watchlist.json`. Pass `--example` only if you want the sample book (a live ~$342 AAPL print will fire those fixture-era levels once):
 
 ```bash
-python3 scripts/watchlist.py init --file live.json
-python3 scripts/watchlist.py add AAPL --file live.json --alert pct_change_down:3
-python3 scripts/alerts.py --watchlist live.json
+python3 .claude/skills/watchlist-manager/scripts/watchlist.py init
+python3 .claude/skills/watchlist-manager/scripts/watchlist.py add AAPL --alert pct_change_down:3
+python3 .claude/skills/price-alerts/scripts/alerts.py
 ```
 
 `--file` can sit before or after the subcommand. If `alerts.py` has no watchlist file, it tells you to run `init` instead of printing a silent “no new alerts.”
@@ -356,8 +356,8 @@ WATCHLIST_FILE=long.json  ALERT_STATE_FILE=.alert_state_long.json  python3 scrip
 
 | Env var | Purpose |
 |---|---|
-| `WATCHLIST_FILE` | Watchlist path (default `./watchlist.json`) |
-| `ALERT_STATE_FILE` | Cooldown state (default `./.alert_state.json`) |
+| `WATCHLIST_FILE` | Watchlist path. Default: `./watchlist.json` in a project directory, else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`; `$XDG_CONFIG_HOME/us-watchlist-alerts/` when set). Never the skill folder. |
+| `ALERT_STATE_FILE` | Cooldown state (default: `.alert_state.json` next to the watchlist) |
 | `WATCHLIST_PROVIDER` | `auto` (default), `alpaca`, `yfinance`, `yahoo`, `finnhub`, `alphavantage` |
 | `WATCHLIST_STALE_AFTER` | Seconds before a regular-session quote is flagged stale (default `900`; `0`=off) |
 | `WATCHLIST_HTTP_TIMEOUT` | HTTP timeout seconds (default `15`) |
@@ -394,7 +394,7 @@ Details: [docs/LIMITATIONS.md](docs/LIMITATIONS.md).
 
 - **Level alerts** (price, stop, target, RSI, ATM IV) latch after firing and re-arm only after the condition clears (price/IV hysteresis via `rearm_pct` for price levels).
 - Each **target** is its own latch, so hitting T1 does not hide T2.
-- **Event alerts** (gaps, % moves, volume, crosses, 52-week highs/lows, earnings, intraday range / opt-in session extremes) fire at most once per trading day.
+- **Event alerts** (gaps, % moves, volume, crosses, 52-week highs/lows, earnings, intraday range / opt-in session extremes) fire at most once per **session date of the data shown**. Overnight and pre-open ticks (last-close mode) key on the previous session, so they do not re-fire yesterday’s daily events as “today.”
 - **Default % checks are last vs prior close.** `pct_change_down: 3` ignores a session low that recovered. Opt-in `intraday_low_pct` / `intraday_extreme_pct` if you want the extreme.
 - A **cooldown** applies to every re-fire. `max_alerts_per_run` caps what is printed; omitted alerts are **not** latched, so the next run can emit them.
 

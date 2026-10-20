@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **`quickstart.py` never writes `watchlist.json`.** The fixture demo reads the bundled example in place (temp state file). `--live` uses the user's real list and prints the `init` hint if it is missing.
+- **Stable watchlist location.** Default is `$WATCHLIST_FILE`, else `./watchlist.json` in a project directory, else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`). Shared by all three skills. Leftover in-skill `watchlist.json` is migrated. `npx skills add` reinstall can no longer delete the list. `schedule.py` (cron and Windows Task Scheduler) uses that data dir as the working directory, not the skill folder.
+- **Daily-event de-dupe keys on the session date of the data shown**, not the wall-clock calendar date. Pre-open / overnight last-close runs do not re-fire yesterday's alerts as "today." Messages say `on YYYY-MM-DD` when that date is not the calendar day.
 - **`watchlist.py init` is empty by default.** A first `add NVDA` no longer hits "already on watchlist", and a first live alerts run no longer fires fixture-era levels like AAPL target $250. `init --example` copies the sample book and prints that it is sample data. `--empty` still works. `quickstart.py` still loads the sample for the fixture demo.
 - README: section on using the skills in ChatGPT, Grok Bot, or other chat agents.
 

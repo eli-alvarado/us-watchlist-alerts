@@ -190,6 +190,32 @@ def next_trading_day(d: dt.date, extra=None) -> dt.date:
     return d
 
 
+def previous_trading_day(d: dt.date, extra=None) -> dt.date:
+    d -= dt.timedelta(days=1)
+    while not is_trading_day(d, extra=extra):
+        d -= dt.timedelta(days=1)
+    return d
+
+
+def trading_session_date(now: dt.datetime, extra=None) -> dt.date:
+    """ET date of the regular session whose last print is currently shown.
+
+    Regular hours and after the same day's close: that calendar day.
+    Pre-open and overnight before 09:30 ET: the previous trading day, so
+    daily-event de-dupe does not treat yesterday's close as a new "today".
+    """
+    now = now.astimezone(ET)
+    today = now.date()
+    sess = session(now, extra=extra)
+    if sess in ("regular", "after"):
+        return today
+    if now.time() < dt.time(9, 30):
+        return previous_trading_day(today, extra=extra)
+    if is_trading_day(today, extra=extra):
+        return today
+    return previous_trading_day(today, extra=extra)
+
+
 def closures_from_trading_days(year, open_dates):
     """Weekdays in ``year`` that are missing from an official set of session dates."""
     open_dates = set(open_dates)

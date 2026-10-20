@@ -19,6 +19,14 @@ DEFAULTS = {"cooldown_minutes": 240, "rearm_pct": 0.5, "sessions": ["regular"],
 def _pct(a, b): return (a - b) / b * 100 if b else 0.0
 
 
+def _move_when(cfg):
+    """'today' during the session whose close we are showing; else 'on YYYY-MM-DD'."""
+    td, today = cfg.get("_trading_date"), cfg.get("_today")
+    if isinstance(td, dt.date) and isinstance(today, dt.date) and td != today:
+        return f"on {td.isoformat()}"
+    return "today"
+
+
 def evaluate_rule(rule, t, q, cfg):
     """Return (fired: bool, message: str, condition_key: str). condition_key distinguishes re-fires."""
     typ = rule["type"]; v = rule.get("value"); p = q.get("price"); pc = q.get("prev_close")
@@ -40,9 +48,10 @@ def evaluate_rule(rule, t, q, cfg):
             if (not short and p >= tg) or (short and p <= tg):
                 return True, f"{sym} ${p:.2f} reached target ${tg:.2f}", f"{typ}:{tg}"
     if chg is not None:
-        if typ == "pct_change_up" and chg >= v: return True, f"{sym} up {chg:+.2f}% today", typ
-        if typ == "pct_change_down" and chg <= -abs(v): return True, f"{sym} down {chg:+.2f}% today", typ
-        if typ == "pct_move" and abs(chg) >= v: return True, f"{sym} moved {chg:+.2f}% today", typ
+        when = _move_when(cfg)
+        if typ == "pct_change_up" and chg >= v: return True, f"{sym} up {chg:+.2f}% {when}", typ
+        if typ == "pct_change_down" and chg <= -abs(v): return True, f"{sym} down {chg:+.2f}% {when}", typ
+        if typ == "pct_move" and abs(chg) >= v: return True, f"{sym} moved {chg:+.2f}% {when}", typ
     o = q.get("open")
     if o is not None and pc:
         gap = _pct(o, pc)
@@ -151,6 +160,9 @@ def load_state(path):
 
 def save_state(state, path):
     payload = {k: v for k, v in state.items() if k != "warning"}
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     tmp = path + ".tmp"
     with open(tmp, "w") as f:
         json.dump(payload, f, indent=2)
@@ -213,7 +225,12 @@ def run(wl, state, quotes_by_sym, now, force_session=False, stale_after=None):
                     "reason": reason, "next_session": nxt.isoformat()}
     if stale_after is None:
         stale_after = cfg.get("stale_after_seconds", DEFAULTS["stale_after_seconds"])
-    trading_date = cfg["_today"].isoformat()
+    # Daily-event de-dupe keys on the session whose close is on the tape, not
+    # the wall-clock calendar date (pre-open would otherwise re-fire yesterday).
+    session_day = mc.trading_session_date(now, extra=extra) if last_close else cfg["_today"]
+    cfg["_trading_date"] = session_day
+    cfg["_last_close"] = last_close
+    trading_date = session_day.isoformat()
     cap = cfg["max_alerts_per_run"]
     truncated = False
     for t in wl["tickers"]:
@@ -272,8 +289,10 @@ def tickers_with_iv_alerts(wl):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--watchlist", default=wlm.DEFAULT_PATH)
-    ap.add_argument("--state", default=os.environ.get("ALERT_STATE_FILE", ".alert_state.json"))
+    ap.add_argument("--watchlist", default=None,
+                    help="watchlist path (default: $WATCHLIST_FILE or shared user/project location)")
+    ap.add_argument("--state", default=None,
+                    help="cooldown state path (default: $ALERT_STATE_FILE or next to the watchlist)")
     ap.add_argument("--fixture"); ap.add_argument("--provider", default="auto")
     ap.add_argument("--now", help="ISO datetime override (testing)")
     ap.add_argument("--force-session", action="store_true", help="evaluate even outside configured sessions")
@@ -285,6 +304,10 @@ def main(argv=None):
                     help="deliver new alerts (comma sinks: webhook,slack,ntfy,desktop,file). "
                          "Omit the value to use WATCHLIST_NOTIFY. Skipped on dry-run / empty / outside session.")
     a = ap.parse_args(argv)
+    if not a.watchlist:
+        a.watchlist = wlm.default_watchlist_path()
+    if not a.state:
+        a.state = wlm.default_state_path(a.watchlist)
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
     if now.tzinfo is None: now = now.replace(tzinfo=mc.ET)
     if not os.path.exists(a.watchlist):

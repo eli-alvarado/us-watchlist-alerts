@@ -9,8 +9,13 @@ Maintains a single source-of-truth watchlist file that the `price-alerts` and `w
 Informational tool only. **Never place, modify, or cancel a trade.** Editing the watchlist is not trading.
 
 ## File location
-1. `$WATCHLIST_FILE` if set, else `./watchlist.json` in the working directory (YAML `watchlist.yaml` works if PyYAML is installed).
-2. If none exists, create it from `examples/watchlist.json` structure with an empty `tickers` list. Ask before overwriting an existing file.
+Shared with `price-alerts` and `watchlist-brief`. Survives `npx skills add` reinstall. Do **not** `cd` into this skill folder to run scripts (that folder is replaced on update). Run from the **project root** by path, e.g. `python3 .claude/skills/watchlist-manager/scripts/watchlist.py init`.
+
+1. `$WATCHLIST_FILE` if set.
+2. Else `./watchlist.json` in the current **project** directory (not inside a skill folder). YAML `watchlist.yaml` works if PyYAML is installed and you pass `--file`.
+3. Else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\watchlist.json`; or `$XDG_CONFIG_HOME/us-watchlist-alerts/`).
+4. A leftover `watchlist.json` inside a skill folder is copied to (3) on first run so reinstall cannot delete it.
+5. If none exists, `init` writes an empty valid list at that default path. Ask before overwriting an existing file.
 
 ## Schema (version 1)
 ```json
@@ -35,7 +40,7 @@ Alert `type` values and their `value` meaning are documented in `skills/price-al
 A `stop` implies a `stop_hit` alert and `targets` imply `target_hit` automatically.
 
 ## Operations (prefer the script; it validates and writes atomically)
-`scripts/` ships next to this SKILL.md after `npx skills add`. Run from this skill folder, or from a git clone (root `scripts/` is the same files):
+`scripts/` ships next to this SKILL.md after `npx skills add`. Run from the project root by path (or from a git clone; root `scripts/` is the same files):
 ```bash
 python3 scripts/watchlist.py init
 python3 scripts/watchlist.py init --example

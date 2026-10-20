@@ -248,7 +248,8 @@ def main(argv=None):
     ap.add_argument("symbol")
     ap.add_argument("--style", choices=("line", "candle"), default="line")
     ap.add_argument("--sma", default="20,50", help="comma-separated SMA windows, or '' for none")
-    ap.add_argument("--watchlist", default=os.environ.get("WATCHLIST_FILE") or "watchlist.json")
+    ap.add_argument("--watchlist", default=None,
+                    help="watchlist path (default: $WATCHLIST_FILE or shared user/project location)")
     ap.add_argument("--fixture")
     ap.add_argument("--out", help="PNG path when matplotlib is installed; ASCII otherwise")
     ap.add_argument("--provider", default="auto")
@@ -256,7 +257,8 @@ def main(argv=None):
     sma_ns = []
     if a.sma.strip():
         sma_ns = [int(x) for x in a.sma.split(",") if x.strip()]
-    wl = a.watchlist if os.path.exists(a.watchlist) else None
+    wl_path = a.watchlist or wlm.default_watchlist_path()
+    wl = wl_path if os.path.exists(wl_path) else None
     result = render(a.symbol, fixture=a.fixture, watchlist=wl, style=a.style,
                     sma_ns=sma_ns, out=a.out, provider=a.provider)
     print(result["text"])

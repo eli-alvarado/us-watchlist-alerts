@@ -132,11 +132,14 @@ def render(wl, quotes, kind, now):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(); ap.add_argument("--watchlist", default=wlm.DEFAULT_PATH)
+    ap = argparse.ArgumentParser(); ap.add_argument("--watchlist", default=None,
+                    help="watchlist path (default: $WATCHLIST_FILE or shared user/project location)")
     ap.add_argument("--kind", default="morning", choices=["morning", "close"]); ap.add_argument("--fixture")
     ap.add_argument("--provider", default="auto"); ap.add_argument("--now")
     ap.add_argument("--format", choices=["markdown", "json"], default="markdown")
     a = ap.parse_args(argv)
+    if not a.watchlist:
+        a.watchlist = wlm.default_watchlist_path()
     now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
     if now.tzinfo is None:
         now = now.replace(tzinfo=mc.ET)
