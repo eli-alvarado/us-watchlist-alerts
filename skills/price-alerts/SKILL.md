@@ -12,7 +12,8 @@ Evaluates alert rules from the watchlist (see `watchlist-manager`) against fresh
 
 ## Run it
 ```bash
-python3 scripts/watchlist.py init                                                         # copy examples/watchlist.json if missing
+python3 scripts/watchlist.py init                                                         # empty watchlist if missing
+python3 scripts/watchlist.py init --example                                               # sample AAPL/TSLA/NVDA (fixture-era levels)
 python3 scripts/quickstart.py                                                             # offline fixture demo (labeled, not live)
 python3 scripts/alerts.py --watchlist watchlist.json --state .alert_state.json           # text output
 python3 scripts/alerts.py --format json                                                    # machine-readable

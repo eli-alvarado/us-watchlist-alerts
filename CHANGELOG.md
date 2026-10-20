@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **`watchlist.py init` is empty by default.** A first `add NVDA` no longer hits "already on watchlist", and a first live alerts run no longer fires fixture-era levels like AAPL target $250. `init --example` copies the sample book and prints that it is sample data. `--empty` still works. `quickstart.py` still loads the sample for the fixture demo.
+- README: section on using the skills in ChatGPT, Grok Bot, or other chat agents.
+
 ## 0.5.0 — 2026-10-16
 
 Price charts plus the post-0.4.1 hardening that had not been tagged yet. Still no auto-trade.
