@@ -8,7 +8,7 @@ description: Produce a concise pre-market (morning) or after-close summary of a 
 Informational summary only - **not financial advice; no trade suggestions or order placement.**
 
 ## Steps
-`scripts/` ships next to this SKILL.md after `npx skills add`. Run them **from the project root by path** (do not `cd` into this skill folder). Same shared watchlist as the other two skills: `$WATCHLIST_FILE`, else `./watchlist.json` in the project directory, else `~/.config/us-watchlist-alerts/watchlist.json`.
+`scripts/` ships next to this SKILL.md after `npx skills add`. Run them **from the project root by path** (do not `cd` into this skill folder). Same shared watchlist as the other two skills: `$WATCHLIST_FILE`, else `./watchlist.json` in the project directory (walks up from `.claude/skills/<name>` / `.agents/skills/<name>`), else `~/.config/us-watchlist-alerts/watchlist.json`.
 
 1. Determine context with `python3 scripts/market_calendar.py`. Morning brief ~08:30-09:25 ET; close brief after 16:05 ET. On holidays/weekends, say the market is closed and give the next session. After the bell the alerter evaluates last regular close and labels it — do the same in the brief.
 2. Generate the table: `python3 scripts/brief.py --kind morning` (or `--kind close`). Columns: Ticker | Price | Chg | RSI14 | Trend (SMA50 vs SMA200) | To stop | To target 1. "To stop" is remaining cushion (positive = room left); shorts use stop-minus-price. Earnings dates in the footer are upcoming only (Yahoo calendar/HTML, Nasdaq analyst page, then Finnhub/AV if keyed). Use `--format json` when a downstream script will consume the brief.

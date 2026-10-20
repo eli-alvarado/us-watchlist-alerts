@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Installed skill cwd uses the project watchlist.** If cwd is inside `.claude/skills/<name>` or `.agents/skills/<name>` (including `scripts/`), path resolution walks up to the project root and uses that `watchlist.json` — the same file as `cd` to the project. `watchlist.py init` / `add` / `list` print `using <path>`.
+- **`alerts.py` prints `error:` and exits 1** when the alert-state directory is not writable (no traceback). **`brief.py`** treats a total quote outage like `alerts.py` (`ERROR no quotes (N/N failed)`, exit 3). A watchlist whose root key is `watchlist` (or anything other than `tickers`) errors instead of looking empty.
 - **`quickstart.py` never writes `watchlist.json`.** The fixture demo reads the bundled example in place (temp state file). `--live` uses the user's real list and prints the `init` hint if it is missing.
 - **Stable watchlist location.** Default is `$WATCHLIST_FILE`, else `./watchlist.json` in a project directory, else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`). Shared by all three skills. Leftover in-skill `watchlist.json` is migrated. `npx skills add` reinstall can no longer delete the list. `schedule.py` (cron and Windows Task Scheduler) uses that data dir as the working directory, not the skill folder.
 - **Daily-event de-dupe keys on the session date of the data shown**, not the wall-clock calendar date. Pre-open / overnight last-close runs do not re-fire yesterday's alerts as "today." Messages say `on YYYY-MM-DD` when that date is not the calendar day.

@@ -43,6 +43,53 @@ def is_skill_install_dir(path):
     )
 
 
+def enclosing_skill_dir(start=None):
+    """Walk up from ``start`` (default: cwd) and return the skill folder, if any."""
+    cur = os.path.abspath(start or os.getcwd())
+    while True:
+        if is_skill_install_dir(cur):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return None
+        cur = parent
+
+
+def installed_skill_project_root(skill_dir):
+    """Project root for ``<root>/.claude/skills/<name>`` or ``<root>/.agents/skills/<name>``.
+
+    ``None`` for the repo's ``skills/`` tree, or a global ``~/.claude/skills`` install
+    whose parent would be the home directory (those keep using the user-config path).
+    """
+    skill_dir = os.path.abspath(skill_dir)
+    skills_dir = os.path.dirname(skill_dir)
+    if os.path.basename(skills_dir) != "skills":
+        return None
+    agent_dir = os.path.dirname(skills_dir)
+    if os.path.basename(agent_dir) not in (".claude", ".agents"):
+        return None
+    root = os.path.dirname(agent_dir)
+    home = os.path.abspath(os.path.expanduser("~"))
+    if os.path.abspath(root) == home:
+        return None
+    return root
+
+
+def project_anchor_dir(start=None):
+    """Directory whose ``watchlist.json`` should be used, or ``None`` for user-config.
+
+    Running from inside ``.claude/skills/<name>`` or ``.agents/skills/<name>``
+    (including ``scripts/``) walks up to the project root so the skill folder and
+    ``cd <project>`` share one file. A bare skill copy that is not in that layout
+    has no project anchor.
+    """
+    cwd = os.path.abspath(start or os.getcwd())
+    skill = enclosing_skill_dir(cwd)
+    if skill:
+        return installed_skill_project_root(skill)
+    return cwd
+
+
 def user_data_dir():
     """Stable dir shared by all three skills; survives skill reinstall.
 
@@ -99,34 +146,43 @@ def default_watchlist_path():
 
     Order:
     1. ``$WATCHLIST_FILE`` if set
-    2. ``./watchlist.json`` when cwd is a project directory (not a skill folder)
-       and the file already exists — the ``cd <project>`` journey
+    2. ``<project>/watchlist.json`` when that file exists. ``project`` is cwd, or
+       the directory that contains ``.claude/skills/<name>`` / ``.agents/skills/<name>``
+       if cwd is inside an installed skill (so ``cd`` into the skill cannot split
+       the list from the project root)
     3. ``$XDG_CONFIG_HOME/us-watchlist-alerts/watchlist.json`` (or ``~/.config/...``),
-       after copying a leftover in-skill ``watchlist.json`` if the user file is new
-    4. For a *new* list: ``./watchlist.json`` in a project cwd, else the user-config path
-       (never write into a skill folder that ``npx skills add`` will replace)
+       after copying a leftover in-skill ``watchlist.json`` if the dest is new
+    4. For a *new* list: ``<project>/watchlist.json`` when a project is identified,
+       else the user-config path (never write into a skill folder that
+       ``npx skills add`` will replace)
     """
     env = (os.environ.get("WATCHLIST_FILE") or "").strip()
     if env:
         return env
-    cwd = os.getcwd()
-    cwd_file = os.path.join(cwd, WATCHLIST_BASENAME)
+    anchor = project_anchor_dir()
     user_file = os.path.join(user_data_dir(), WATCHLIST_BASENAME)
-    if os.path.isfile(cwd_file) and not is_skill_install_dir(cwd):
-        return cwd_file
+    anchor_file = os.path.join(anchor, WATCHLIST_BASENAME) if anchor else None
+    if anchor_file and os.path.isfile(anchor_file):
+        return anchor_file
     if os.path.isfile(user_file):
         return user_file
     legacy = _legacy_skill_files(WATCHLIST_BASENAME)
     if legacy:
-        _migrate_file(legacy[0], user_file)
+        dest = anchor_file or user_file
+        _migrate_file(legacy[0], dest)
         src_state = os.path.join(os.path.dirname(legacy[0]), STATE_BASENAME)
-        dest_state = os.path.join(user_data_dir(), STATE_BASENAME)
+        dest_state = os.path.join(os.path.dirname(os.path.abspath(dest)), STATE_BASENAME)
         if os.path.isfile(src_state) and not os.path.isfile(dest_state):
             _migrate_file(src_state, dest_state)
-        return user_file
-    if not is_skill_install_dir(cwd):
-        return cwd_file
+        return dest
+    if anchor_file:
+        return anchor_file
     return user_file
+
+
+def note_using(path):
+    """Tell the user which watchlist file a mutating / listing command used."""
+    print(f"using {os.path.abspath(path)}", file=sys.stderr)
 
 
 def default_state_path(watchlist_path=None):
@@ -175,7 +231,8 @@ def missing_watchlist_hint(path):
         f"No watchlist at {path}.",
         "Create one:  python3 scripts/watchlist.py init",
         "Sample data: python3 scripts/watchlist.py init --example",
-        "Defaults: $WATCHLIST_FILE, else ./watchlist.json in a project directory,",
+        "Defaults: $WATCHLIST_FILE, else ./watchlist.json in the project (also used when cwd is",
+        "inside .claude/skills/<name> or .agents/skills/<name>),",
         f"else {os.path.join(user_data_dir(), WATCHLIST_BASENAME)} (shared, survives skill reinstall).",
     ]
     if ex:
@@ -226,9 +283,19 @@ def load(path=None):
         raise ValueError(f"{path} is not valid JSON (line {e.lineno} col {e.colno})") from e
     if not isinstance(data, dict):
         raise ValueError("watchlist root must be an object")
+    if "tickers" not in data:
+        alt = next((k for k in ("watchlist", "symbols", "stocks", "items") if k in data), None)
+        if alt:
+            raise ValueError(
+                f"{path} has top-level {alt!r} but needs 'tickers' "
+                f"(rename that key to 'tickers')"
+            )
+        keys = ", ".join(sorted(data)) or "(none)"
+        raise ValueError(f"{path} is missing top-level 'tickers' (keys: {keys})")
+    if not isinstance(data["tickers"], list):
+        raise ValueError(f"{path}: 'tickers' must be a list")
     data.setdefault("version", SCHEMA_VERSION)
     data.setdefault("settings", {})
-    data.setdefault("tickers", [])
     return data
 
 
@@ -387,7 +454,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--file", default=None,
                     help="watchlist path (default: $WATCHLIST_FILE, else ./watchlist.json "
-                         "in a project dir, else ~/.config/us-watchlist-alerts/watchlist.json)")
+                         "in the project even when cwd is .claude/skills/* or .agents/skills/*, "
+                         "else ~/.config/us-watchlist-alerts/watchlist.json)")
     sp = ap.add_subparsers(dest="cmd", required=True)
     for name in ("add", "update"):
         p = sp.add_parser(name); p.add_argument("symbol")
@@ -424,6 +492,7 @@ def main(argv=None):
                   "(e.g. AAPL target $250). Not a live book — demos only.")
         else:
             print(f"wrote {path} (empty)")
+        note_using(path)
         return 0
     try:
         wl = load(a.file)
@@ -432,7 +501,9 @@ def main(argv=None):
             kw["alerts"] = [parse_alert(x) for x in (a.alerts or [])]
             if a.cmd == "update": kw["append"] = a.append
             t = (add if a.cmd == "add" else update)(wl, a.symbol, **kw)
-            save(wl, a.file); print(json.dumps(t, indent=2)); return 0
+            save(wl, a.file)
+            note_using(a.file)
+            print(json.dumps(t, indent=2)); return 0
         elif a.cmd == "remove":
             t = remove(wl, a.symbol)
             save(wl, a.file); print(f"removed {t['symbol']}"); return 0
@@ -442,6 +513,7 @@ def main(argv=None):
                 print(f"{a.symbol.upper()} not on watchlist", file=sys.stderr); return 1
             print(json.dumps(t, indent=2)); return 0
         elif a.cmd == "list":
+            note_using(a.file)
             for t in wl["tickers"]:
                 if a.tag and a.tag not in t.get("tags", []): continue
                 print(f"{t['symbol']:<7} entry={t.get('entry')} stop={t.get('stop')} targets={t.get('targets')} tags={','.join(t.get('tags', []))}  {t.get('thesis','')}")

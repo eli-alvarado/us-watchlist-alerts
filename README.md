@@ -51,7 +51,7 @@ Never places trades.
 
 **Does it place trades?** No. Every `SKILL.md` and [SECURITY.md](SECURITY.md) say the agent must never place, modify, or cancel an order without your explicit confirmation of that specific order. There is no broker submit path in this repo.
 
-**Where does my data go?** `$WATCHLIST_FILE` if set, else `./watchlist.json` in your **project** directory, else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`). Alert state defaults to `.alert_state.json` next to that file. That location is shared by all three skills and is **not** inside the skill folder, so `npx skills add` (reinstall/update) cannot delete it. Outbound HTTPS is quotes and (if you enable them) notify sinks. Keys belong in the environment, never in the watchlist file. See [SECURITY.md](SECURITY.md).
+**Where does my data go?** `$WATCHLIST_FILE` if set, else `./watchlist.json` in your **project** directory (the same file if you `cd` into `.claude/skills/<name>` or `.agents/skills/<name>` — the scripts walk up to the project root), else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`). Alert state defaults to `.alert_state.json` next to that file. `watchlist.py init` / `add` / `list` print `using <path>` so you can see which file was chosen. That location is shared by all three skills and is **not** inside the skill folder, so `npx skills add` (reinstall/update) cannot delete it. Outbound HTTPS is quotes and (if you enable them) notify sinks. Keys belong in the environment, never in the watchlist file. See [SECURITY.md](SECURITY.md).
 
 **What data sources?** Default: unofficial Yahoo Finance chart (stdlib). Fallback order and earnings/IV layers: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Quotes may be delayed ~15 minutes. US-listed stocks and ETFs only.
 
@@ -122,7 +122,7 @@ python3 .claude/skills/price-alerts/scripts/quotes.py AAPL
 # Cursor / Codex / Gemini CLI: .agents/skills/price-alerts/scripts/...
 ```
 
-`quickstart.py` reads the bundled example **in place** for the fixture demo and never writes `watchlist.json`. `watchlist.py init` writes an **empty** list at the shared default path so a first `add NVDA` succeeds. All three skills use the same file: `$WATCHLIST_FILE`, else `./watchlist.json` in this project, else `~/.config/us-watchlist-alerts/watchlist.json`. Pass `--example` only if you want the sample book (a live ~$342 AAPL print will fire those fixture-era levels once):
+`quickstart.py` reads the bundled example **in place** for the fixture demo and never writes `watchlist.json`. `watchlist.py init` writes an **empty** list at the shared default path so a first `add NVDA` succeeds. All three skills use the same file: `$WATCHLIST_FILE`, else `./watchlist.json` in this project (also when cwd is `.claude/skills/<name>` or `.agents/skills/<name>`), else `~/.config/us-watchlist-alerts/watchlist.json`. Pass `--example` only if you want the sample book (a live ~$342 AAPL print will fire those fixture-era levels once):
 
 ```bash
 python3 .claude/skills/watchlist-manager/scripts/watchlist.py init
@@ -356,7 +356,7 @@ WATCHLIST_FILE=long.json  ALERT_STATE_FILE=.alert_state_long.json  python3 scrip
 
 | Env var | Purpose |
 |---|---|
-| `WATCHLIST_FILE` | Watchlist path. Default: `./watchlist.json` in a project directory, else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`; `$XDG_CONFIG_HOME/us-watchlist-alerts/` when set). Never the skill folder. |
+| `WATCHLIST_FILE` | Watchlist path. Default: `./watchlist.json` in a project directory (walks up from `.claude/skills/<name>` / `.agents/skills/<name>`), else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`; `$XDG_CONFIG_HOME/us-watchlist-alerts/` when set). Never the skill folder. |
 | `ALERT_STATE_FILE` | Cooldown state (default: `.alert_state.json` next to the watchlist) |
 | `WATCHLIST_PROVIDER` | `auto` (default), `alpaca`, `yfinance`, `yahoo`, `finnhub`, `alphavantage` |
 | `WATCHLIST_STALE_AFTER` | Seconds before a regular-session quote is flagged stale (default `900`; `0`=off) |

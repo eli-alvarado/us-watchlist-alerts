@@ -162,14 +162,22 @@ def load_state(path):
 
 def save_state(state, path):
     payload = {k: v for k, v in state.items() if k != "warning"}
-    parent = os.path.dirname(os.path.abspath(path))
-    if parent:
-        os.makedirs(parent, exist_ok=True)
+    path = os.path.abspath(path)
+    parent = os.path.dirname(path)
     tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(payload, f, indent=2)
-        f.write("\n")
-    os.replace(tmp, path)
+    try:
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with open(tmp, "w") as f:
+            json.dump(payload, f, indent=2)
+            f.write("\n")
+        os.replace(tmp, path)
+    except OSError as e:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise OSError(f"cannot write alert state {path}: {e}") from e
 
 
 def should_emit(state, key, now, cooldown_min, trading_date):
@@ -358,7 +366,12 @@ def main(argv=None):
     res = run(wl, state, quotes, now, a.force_session, stale_after=stale_after)
     if warn:
         res["state_warning"] = warn
-    if not a.dry_run and not res["skipped"]: save_state(state, a.state)
+    try:
+        if not a.dry_run and not res["skipped"]:
+            save_state(state, a.state)
+    except OSError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     sinks = a.notify
     if sinks is None and os.environ.get("WATCHLIST_NOTIFY"):
         sinks = "env"
