@@ -122,10 +122,10 @@ python3 scripts/quickstart.py
 python3 scripts/quotes.py AAPL          # live Yahoo when you want it
 ```
 
-`quickstart.py` copies the bundled example (AAPL `price_above: 240`, sized for the **fixture**). On a live ~$342 print those levels fire once. For a live book with no leftover $240 rules:
+`quickstart.py` still loads the bundled example for the fixture demo (AAPL `price_above: 240`). `watchlist.py init` writes an **empty** list so a first `add NVDA` succeeds. Pass `--example` only if you want the sample book (a live ~$342 AAPL print will fire those fixture-era levels once):
 
 ```bash
-python3 scripts/watchlist.py init --empty --file live.json
+python3 scripts/watchlist.py init --file live.json
 python3 scripts/watchlist.py add AAPL --file live.json --alert pct_change_down:3
 python3 scripts/alerts.py --watchlist live.json
 ```
@@ -158,6 +158,10 @@ python3 scripts/brief.py --watchlist tests/fixtures/watchlist.json \
 python3 scripts/chart.py AAPL --watchlist tests/fixtures/watchlist.json \
   --fixture tests/fixtures/quotes.json
 ```
+
+### Use it in ChatGPT, Grok Bot, or other chat agents
+
+You don't need a terminal if your chat assistant can load skills and has its own computer to run code. Grok Bot works today: we tested the skills there, and on Python 3.10+ they pull live Yahoo prices, keep your watchlist, fire alerts and write briefs, with nothing extra to install and no API key. ChatGPT supports uploading skills in this same format on Business, Enterprise and Edu plans, but we haven't tested it there, and its sandbox may block the live price lookups (the bundled sample data still works offline). Once the skill is added, just chat normally, for example "watch NVDA and tell me if it drops below 140" or "give me my morning brief." It's for information only: it never places trades.
 
 ## Example output
 
@@ -223,7 +227,7 @@ Use `--format json` to get the same ticker rows, biggest movers, earnings dates,
 
 "To stop" is remaining cushion (positive = room left). Live runs label the data source (`yahoo-chart`, `yfinance`, …) instead of `fixture`.
 
-**What does the bundled example do on live quotes?** It is a fixture-era book (AAPL above $240). A live AAPL ~$342 will fire those level alerts once. Use `init --empty` (above) for a clean live list.
+**What does the bundled example do on live quotes?** It is a fixture-era book (AAPL above $240). A live AAPL ~$342 will fire those level alerts once. Default `init` is an empty live list; `init --example` is the sample.
 
 ## Install per agent
 

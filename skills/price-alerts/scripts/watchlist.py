@@ -1,6 +1,7 @@
 """Watchlist CRUD. Stores JSON (default) or YAML (if PyYAML installed and path ends .yaml/.yml).
 
 python scripts/watchlist.py init
+python scripts/watchlist.py init --example
 python scripts/watchlist.py add NVDA --thesis "AI capex" --entry 120 \
     --target 150 --target 180 --stop 105 --tag ai --tag semis --alert "price_below:110"
 python scripts/watchlist.py --file swing.json add NVDA --alert price_below:110
@@ -60,22 +61,29 @@ def missing_watchlist_hint(path):
     lines = [
         f"No watchlist at {path}.",
         "Create one:  python3 scripts/watchlist.py init",
-        "Empty live book: python3 scripts/watchlist.py init --empty",
+        "Sample data: python3 scripts/watchlist.py init --example",
     ]
     if ex:
         lines.append(f"Or pass:     --watchlist {ex}")
     return "\n".join(lines)
 
 
-def init_file(path=DEFAULT_PATH, empty=False):
-    """Copy the bundled example (or write an empty valid list) if ``path`` is free."""
+def init_file(path=DEFAULT_PATH, *, example=False, empty=False):
+    """Write an empty valid watchlist, or copy the bundled sample if ``example``.
+
+    ``empty`` is accepted for compatibility; empty is already the default.
+    """
+    if example and empty:
+        raise ValueError("pass only one of --example or --empty")
     if os.path.exists(path):
         raise FileExistsError(f"{path} already exists")
     parent = os.path.dirname(os.path.abspath(path))
     if parent:
         os.makedirs(parent, exist_ok=True)
-    src = None if empty else bundled_example()
-    if src:
+    if example:
+        src = bundled_example()
+        if not src:
+            raise FileNotFoundError("bundled example watchlist not found")
         shutil.copy2(src, path)
         return path, "copied-example"
     save({"version": SCHEMA_VERSION, "settings": {}, "tickers": []}, path)
@@ -237,17 +245,25 @@ def main(argv=None):
     p = sp.add_parser("list"); p.add_argument("--tag")
     sp.add_parser("validate")
     p_init = sp.add_parser("init")
-    p_init.add_argument("--empty", action="store_true",
-                        help="write an empty valid watchlist (skip the fixture-era example book)")
+    g_init = p_init.add_mutually_exclusive_group()
+    g_init.add_argument("--example", action="store_true",
+                        help="copy the bundled sample watchlist (AAPL/TSLA/NVDA fixture-era levels; not a live book)")
+    g_init.add_argument("--empty", action="store_true",
+                        help="write an empty valid watchlist (default; kept for compatibility)")
     a = ap.parse_args(rest)
     if file_override:
         a.file = file_override
     if a.cmd == "init":
         try:
-            path, how = init_file(a.file, empty=a.empty)
-        except FileExistsError as e:
+            path, how = init_file(a.file, example=a.example, empty=a.empty)
+        except (FileExistsError, FileNotFoundError, ValueError) as e:
             print(e, file=sys.stderr); return 1
-        print(f"wrote {path} ({how})")
+        if how == "copied-example":
+            print(f"wrote {path} (sample data)")
+            print("SAMPLE DATA: AAPL, TSLA, NVDA with fixture-era price levels "
+                  "(e.g. AAPL target $250). Not a live book — demos only.")
+        else:
+            print(f"wrote {path} (empty)")
         return 0
     wl = load(a.file)
     if a.cmd in ("add", "update"):

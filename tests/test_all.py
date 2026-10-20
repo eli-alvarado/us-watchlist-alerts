@@ -1031,25 +1031,77 @@ class WatchlistCli(unittest.TestCase):
         self.assertTrue(os.path.exists(path))
         self.assertEqual(wlm.load(path)["tickers"][0]["symbol"], "MSFT")
 
-    def test_init_copies_example(self):
+    def test_init_default_is_empty(self):
         d = tempfile.mkdtemp()
         path = os.path.join(d, "watchlist.json")
-        rc = wlm.main(["init", "--file", path])
+        buf = io.StringIO()
+        with mock.patch("sys.stdout", buf):
+            rc = wlm.main(["init", "--file", path])
         self.assertEqual(rc, 0)
-        wl = wlm.load(path)
-        self.assertGreaterEqual(len(wl["tickers"]), 1)
-        self.assertEqual(wlm.main(["init", "--file", path]), 1)
+        self.assertEqual(wlm.load(path)["tickers"], [])
+        out = buf.getvalue()
+        self.assertIn("(empty)", out)
+        self.assertNotIn("SAMPLE DATA", out)
+        with mock.patch("sys.stderr", io.StringIO()):
+            self.assertEqual(wlm.main(["init", "--file", path]), 1)
+        rc = wlm.main(["add", "NVDA", "--file", path])
+        self.assertEqual(rc, 0)
+        self.assertEqual(wlm.load(path)["tickers"][0]["symbol"], "NVDA")
 
-    def test_init_empty(self):
+    def test_init_empty_flag_still_empty(self):
         d = tempfile.mkdtemp()
         path = os.path.join(d, "live.json")
         rc = wlm.main(["init", "--empty", "--file", path])
         self.assertEqual(rc, 0)
         self.assertEqual(wlm.load(path)["tickers"], [])
 
+    def test_init_example_copies_sample_and_labels_it(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "watchlist.json")
+        buf = io.StringIO()
+        with mock.patch("sys.stdout", buf):
+            rc = wlm.main(["init", "--example", "--file", path])
+        self.assertEqual(rc, 0)
+        wl = wlm.load(path)
+        self.assertGreaterEqual(len(wl["tickers"]), 1)
+        self.assertEqual({t["symbol"] for t in wl["tickers"]}, {"AAPL", "TSLA", "NVDA"})
+        out = buf.getvalue()
+        self.assertIn("SAMPLE DATA", out)
+        self.assertIn("sample data", out.lower())
+        with mock.patch("sys.stderr", io.StringIO()):
+            self.assertEqual(wlm.main(["init", "--example", "--file", path]), 1)
+        buf2 = io.StringIO()
+        with mock.patch("sys.stderr", buf2):
+            rc = wlm.main(["add", "NVDA", "--file", path])
+        self.assertEqual(rc, 1)
+        self.assertIn("already on watchlist", buf2.getvalue())
+
+    def test_init_example_and_empty_conflict(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "watchlist.json")
+        with mock.patch("sys.stderr", io.StringIO()):
+            with self.assertRaises(SystemExit):
+                wlm.main(["init", "--example", "--empty", "--file", path])
+        self.assertFalse(os.path.exists(path))
+
     def test_missing_watchlist_hint(self):
         msg = wlm.missing_watchlist_hint("nope.json")
         self.assertIn("watchlist.py init", msg)
+        self.assertIn("--example", msg)
+        self.assertNotIn("--empty", msg)
+
+    def test_default_init_does_not_fire_stale_example_alerts(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "watchlist.json")
+        self.assertEqual(wlm.main(["init", "--file", path]), 0)
+        buf = io.StringIO()
+        with mock.patch("sys.stdout", buf):
+            rc = alerts.main(["--watchlist", path, "--state", os.path.join(d, "s.json"),
+                              "--fixture", FX, "--now", "2026-10-15T18:30:00-04:00"])
+        self.assertEqual(rc, 0)
+        out = buf.getvalue()
+        self.assertNotIn("reached target", out)
+        self.assertNotIn("AAPL", out)
 
 
 class AlertsMissingWatchlist(unittest.TestCase):
@@ -1073,6 +1125,9 @@ class FreshInstallLayouts(unittest.TestCase):
         self.assertTrue(os.path.exists(fx), rel)
         wl = os.path.join(dest, "watchlist.json")
         rc = wlm.main(["init", "--file", wl])
+        self.assertEqual(rc, 0, rel)
+        self.assertEqual(wlm.load(wl)["tickers"], [], rel)
+        rc = wlm.main(["add", "NVDA", "--file", wl])
         self.assertEqual(rc, 0, rel)
         st = os.path.join(dest, ".state.json")
         rc = alerts.main(["--watchlist", wl, "--state", st, "--fixture", fx,
@@ -1259,6 +1314,22 @@ class Schedule(unittest.TestCase):
             rc = qs.main(["schedule", "--dry-run"])
         self.assertEqual(rc, 0)
         m.assert_called_once_with(["--dry-run"])
+
+    def test_quickstart_fixture_still_uses_sample_watchlist(self):
+        import quickstart as qs
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "watchlist.json")
+        buf = io.StringIO()
+        with mock.patch("sys.stdout", buf), mock.patch.object(qs, "ROOT", d):
+            rc = qs.main(["--file", path])
+        self.assertEqual(rc, 0)
+        wl = wlm.load(path)
+        self.assertGreaterEqual(len(wl["tickers"]), 1)
+        self.assertEqual({t["symbol"] for t in wl["tickers"]}, {"AAPL", "TSLA", "NVDA"})
+        out = buf.getvalue()
+        self.assertIn("FIXTURE DEMO", out)
+        self.assertIn("SAMPLE DATA", out)
+        self.assertIn("ALERT", out)
 
 
 if __name__ == "__main__":

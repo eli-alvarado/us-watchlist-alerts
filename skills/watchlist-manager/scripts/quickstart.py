@@ -27,8 +27,10 @@ def main(argv=None):
     ap.add_argument("--file", default=os.path.join(ROOT, "watchlist.json"))
     a = ap.parse_args(argv)
     if not os.path.exists(a.file):
-        path, how = wlm.init_file(a.file)
+        path, how = wlm.init_file(a.file, example=True)
         print(f"wrote {path} ({how})")
+        if how == "copied-example":
+            print("SAMPLE DATA: bundled example watchlist for the fixture demo, not a live book.")
     fx = None if a.live else wlm.bundled_fixture()
     if not a.live and not fx:
         print("No bundled quotes fixture; pass --live or --fixture yourself.", file=sys.stderr)
