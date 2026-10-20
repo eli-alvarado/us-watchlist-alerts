@@ -12,10 +12,10 @@ Informational tool only. **Never place, modify, or cancel a trade.** Editing the
 Shared with `price-alerts` and `watchlist-brief`. Survives `npx skills add` reinstall. Do **not** `cd` into this skill folder to run scripts (that folder is replaced on update). Run from the **project root** by path, e.g. `python3 .claude/skills/watchlist-manager/scripts/watchlist.py init`.
 
 1. `$WATCHLIST_FILE` if set.
-2. Else `./watchlist.json` in the current **project** directory (not inside a skill folder). YAML `watchlist.yaml` works if PyYAML is installed and you pass `--file`.
+2. Else `./watchlist.json` in the **project** directory. If cwd is inside `.claude/skills/<name>` or `.agents/skills/<name>` (this folder, or `scripts/`), walk up to the project root and use **that** `watchlist.json` so the skill folder and project root cannot diverge. YAML `watchlist.yaml` works if PyYAML is installed and you pass `--file`.
 3. Else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\watchlist.json`; or `$XDG_CONFIG_HOME/us-watchlist-alerts/`).
-4. A leftover `watchlist.json` inside a skill folder is copied to (3) on first run so reinstall cannot delete it.
-5. If none exists, `init` writes an empty valid list at that default path. Ask before overwriting an existing file.
+4. A leftover `watchlist.json` inside a skill folder is copied to that destination on first run so reinstall cannot delete it.
+5. If none exists, `init` writes an empty valid list at that default path (`init` / `add` / `list` print `using <path>`). Ask before overwriting an existing file.
 
 ## Schema (version 1)
 ```json

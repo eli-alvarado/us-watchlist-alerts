@@ -1,6 +1,9 @@
 """Render a markdown or JSON watchlist brief (morning or close).
 
 python scripts/brief.py --watchlist watchlist.json --kind morning|close [--fixture f.json] [--format markdown|json]
+
+Exit 0 on success (including an empty watchlist hint). Exit 2 if the watchlist file is missing.
+Exit 3 if every ticker failed to quote (a total feed outage is not a silent empty brief).
 """
 from __future__ import annotations
 import argparse, datetime as dt, json, os, sys
@@ -169,10 +172,16 @@ def main(argv=None):
     for t in wl["tickers"]:
         try: quotes[t["symbol"]] = qt.get_quote(t["symbol"], a.provider, a.fixture)
         except Exception as e: quotes[t["symbol"]] = {"error": str(e)}
+    n_tickers = len(wl["tickers"])
+    n_failed = sum(1 for t in wl["tickers"] if (quotes.get(t["symbol"]) or {}).get("error"))
+    total_outage = bool(n_tickers) and n_failed == n_tickers
     if a.format == "json":
         print(json.dumps(render_json(wl, quotes, a.kind, now), indent=2, sort_keys=True))
     else:
         print(render(wl, quotes, a.kind, now))
+    if total_outage:
+        print(f"ERROR no quotes ({n_failed}/{n_tickers} failed)", file=sys.stderr)
+        return 3
     return 0
 
 

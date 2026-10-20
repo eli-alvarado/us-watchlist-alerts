@@ -1406,6 +1406,13 @@ def _copy_skill(dest_parent, name="price-alerts"):
     return dest
 
 
+def _install_skill(proj, name="price-alerts", agent=".claude"):
+    """Layout after `npx skills add` into a project: ``<proj>/.claude/skills/<name>``."""
+    dest_parent = os.path.join(proj, agent, "skills")
+    os.makedirs(dest_parent, exist_ok=True)
+    return _copy_skill(dest_parent, name)
+
+
 class WatchlistPaths(unittest.TestCase):
     def test_watchlist_file_env_wins(self):
         d = tempfile.mkdtemp()
@@ -1441,6 +1448,52 @@ class WatchlistPaths(unittest.TestCase):
             dest = os.path.join(iso.xdg, "us-watchlist-alerts", "watchlist.json")
             self.assertEqual(os.path.abspath(got), os.path.abspath(dest))
             self.assertEqual(wlm.load(got)["tickers"][0]["symbol"], "MSFT")
+
+    def test_installed_skill_cwd_uses_project_watchlist(self):
+        proj = tempfile.mkdtemp()
+        skill = _install_skill(proj)
+        proj_wl = os.path.join(proj, "watchlist.json")
+        with open(proj_wl, "w") as f:
+            json.dump({"version": 1, "settings": {}, "tickers": [{"symbol": "AAPL", "side": "long"}]}, f)
+        with IsolatedDataDir(chdir=skill):
+            got = os.path.abspath(wlm.default_watchlist_path())
+            self.assertEqual(got, os.path.abspath(proj_wl))
+            os.chdir(os.path.join(skill, "scripts"))
+            self.assertEqual(os.path.abspath(wlm.default_watchlist_path()), os.path.abspath(proj_wl))
+            self.assertEqual(wlm.load(got)["tickers"][0]["symbol"], "AAPL")
+
+    def test_installed_skill_init_shares_project_root_list(self):
+        proj = tempfile.mkdtemp()
+        skill = _install_skill(proj, "price-alerts", ".claude")
+        manager = _install_skill(proj, "watchlist-manager", ".agents")
+        with IsolatedDataDir(chdir=skill) as iso:
+            err = io.StringIO()
+            with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", err):
+                self.assertEqual(wlm.main(["init"]), 0)
+                self.assertEqual(wlm.main(["add", "NVDA"]), 0)
+            proj_wl = os.path.join(proj, "watchlist.json")
+            self.assertTrue(os.path.isfile(proj_wl), err.getvalue())
+            self.assertIn("using " + os.path.abspath(proj_wl), err.getvalue())
+            self.assertEqual([t["symbol"] for t in wlm.load(proj_wl)["tickers"]], ["NVDA"])
+            user_wl = os.path.join(iso.xdg, "us-watchlist-alerts", "watchlist.json")
+            self.assertFalse(os.path.isfile(user_wl))
+            os.chdir(proj)
+            self.assertEqual(os.path.abspath(wlm.default_watchlist_path()), os.path.abspath(proj_wl))
+            os.chdir(manager)
+            self.assertEqual(os.path.abspath(wlm.default_watchlist_path()), os.path.abspath(proj_wl))
+            os.chdir(os.path.join(manager, "scripts"))
+            self.assertEqual(os.path.abspath(wlm.default_watchlist_path()), os.path.abspath(proj_wl))
+
+    def test_init_add_list_print_using_path(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        err = io.StringIO()
+        with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", err):
+            self.assertEqual(wlm.main(["init", "--file", path]), 0)
+            self.assertEqual(wlm.main(["add", "AMD", "--file", path]), 0)
+            self.assertEqual(wlm.main(["list", "--file", path]), 0)
+        text = err.getvalue()
+        self.assertGreaterEqual(text.count("using " + os.path.abspath(path)), 3)
 
 
 class Journeys(unittest.TestCase):
@@ -1751,6 +1804,57 @@ class CliUx(unittest.TestCase):
         with mock.patch("sys.stdout", out):
             brief.main(["--watchlist", WL, "--fixture", FX, "--now", "2026-10-15T10:55:00-04:00"])
         self.assertIn("intraday brief", out.getvalue())
+
+    def test_unwritable_state_dir_is_friendly(self):
+        d = tempfile.mkdtemp()
+        blocker = os.path.join(d, "not-a-dir")
+        with open(blocker, "w") as f:
+            f.write("x")
+        state = os.path.join(blocker, ".alert_state.json")
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = alerts.main(["--watchlist", WL, "--state", state, "--fixture", FX,
+                              "--now", "2026-10-15T10:00:00-04:00"])
+        self.assertEqual(rc, 1)
+        self.assertIn("error:", err.getvalue())
+        self.assertIn("cannot write alert state", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+        self.assertNotIn("Traceback", out.getvalue())
+
+    def test_brief_all_quotes_failed_exits_3(self):
+        def boom(*a, **k):
+            raise RuntimeError("feed down")
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(brief.qt, "get_quote", side_effect=boom), \
+             mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = brief.main(["--watchlist", WL, "--kind", "morning",
+                             "--now", "2026-10-15T08:30:00-04:00"])
+        self.assertEqual(rc, 3)
+        self.assertIn("ERROR no quotes", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+
+    def test_wrong_top_level_key_is_not_empty(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        with open(path, "w") as f:
+            json.dump({"version": 1, "watchlist": [{"symbol": "AAPL", "side": "long"}]}, f)
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = wlm.main(["list", "--file", path])
+        self.assertEqual(rc, 1)
+        msg = err.getvalue()
+        self.assertIn("watchlist", msg)
+        self.assertIn("tickers", msg)
+        self.assertNotIn("Watchlist is empty", msg)
+        with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(alerts.main(["--watchlist", path]), 1)
+        missing = os.path.join(d, "notickers.json")
+        with open(missing, "w") as f:
+            json.dump({"version": 1, "settings": {}}, f)
+        err2 = io.StringIO()
+        with mock.patch("sys.stderr", err2), mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(wlm.main(["list", "--file", missing]), 1)
+        self.assertIn("missing top-level 'tickers'", err2.getvalue())
 
     def test_installed_skills_do_not_point_at_unshipped_docs(self):
         for skill in ("price-alerts", "watchlist-manager", "watchlist-brief"):

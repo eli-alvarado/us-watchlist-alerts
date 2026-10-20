@@ -12,7 +12,7 @@ Evaluates alert rules from the watchlist (see `watchlist-manager`) against fresh
 
 `python3 .claude/skills/price-alerts/scripts/alerts.py` (Claude Code) or `python3 .agents/skills/price-alerts/scripts/alerts.py` (Cursor / Codex / Gemini CLI). From a git clone, `python3 scripts/alerts.py` at the repo root is the same files.
 
-**Watchlist location** (shared with `watchlist-manager` and `watchlist-brief`; survives reinstall): `$WATCHLIST_FILE` if set, else `./watchlist.json` in the project directory, else `~/.config/us-watchlist-alerts/watchlist.json` (`%APPDATA%\us-watchlist-alerts\` on Windows; `$XDG_CONFIG_HOME/us-watchlist-alerts/` when that env is set). A leftover in-skill `watchlist.json` is copied to the user-config dir on first run. Alert state defaults to `.alert_state.json` next to that file (`$ALERT_STATE_FILE` overrides).
+**Watchlist location** (shared with `watchlist-manager` and `watchlist-brief`; survives reinstall): `$WATCHLIST_FILE` if set, else `./watchlist.json` in the project directory (if cwd is this skill folder or `scripts/`, the scripts walk up to the project that contains `.claude/skills/` or `.agents/skills/` and use that file), else `~/.config/us-watchlist-alerts/watchlist.json` (`%APPDATA%\us-watchlist-alerts\` on Windows; `$XDG_CONFIG_HOME/us-watchlist-alerts/` when that env is set). A leftover in-skill `watchlist.json` is copied to that destination on first run. Alert state defaults to `.alert_state.json` next to that file (`$ALERT_STATE_FILE` overrides). `watchlist.py init` / `add` / `list` print `using <path>`.
 
 ## Run it
 ```bash
