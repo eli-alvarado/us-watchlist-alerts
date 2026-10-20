@@ -16,7 +16,7 @@ install sends one test ping. Never places trades.
 from __future__ import annotations
 import argparse, os, shlex, shutil, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import notify
+import notify, watchlist as wlm
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -29,6 +29,21 @@ ENV_KEYS = (
     "WATCHLIST_FILE", "ALERT_STATE_FILE", "WATCHLIST_PROVIDER",
 )
 DOTENV = os.path.join(ROOT, ".env")
+
+
+def _paths(root=ROOT, watchlist=None, state=None):
+    """Absolute script + watchlist/state/data-dir. Data dir is never a skill folder."""
+    root = os.path.abspath(root)
+    script = os.path.join(root, "scripts", "alerts.py")
+    wl = os.path.abspath(watchlist or wlm.default_watchlist_path())
+    st = os.path.abspath(state or wlm.default_state_path(wl))
+    data = os.path.dirname(wl) or os.getcwd()
+    return root, script, wl, st, data
+
+
+def dotenv_path(watchlist=None):
+    wl = os.path.abspath(watchlist or wlm.default_watchlist_path())
+    return os.path.join(os.path.dirname(wl) or os.getcwd(), ".env")
 
 
 def load_dotenv(path=DOTENV):
@@ -45,9 +60,14 @@ def load_dotenv(path=DOTENV):
                 os.environ[k] = v
 
 
-def cron_job_line(root=ROOT, python=None):
+def cron_job_line(root=ROOT, python=None, watchlist=None, state=None):
     python = python or sys.executable
-    inner = f"cd {shlex.quote(root)} && (set -a; [ -f .env ] && . ./.env; set +a; {shlex.quote(python)} scripts/alerts.py --notify) >> alerts.log 2>&1"
+    _, script, wl, st, data = _paths(root, watchlist, state)
+    inner = (
+        f"cd {shlex.quote(data)} && (set -a; [ -f .env ] && . ./.env; set +a; "
+        f"{shlex.quote(python)} {shlex.quote(script)} --watchlist {shlex.quote(wl)} "
+        f"--state {shlex.quote(st)} --notify) >> alerts.log 2>&1"
+    )
     return f"*/5 * * * 1-5 {inner}"
 
 
@@ -67,25 +87,30 @@ def strip_block(text):
     return out
 
 
-def render_block(root=ROOT, python=None):
-    return [BEGIN, cron_job_line(root, python), END]
+def render_block(root=ROOT, python=None, watchlist=None, state=None):
+    return [BEGIN, cron_job_line(root, python, watchlist, state), END]
 
 
-def merge_crontab(existing, uninstall=False, root=ROOT, python=None):
+def merge_crontab(existing, uninstall=False, root=ROOT, python=None, watchlist=None, state=None):
     kept = strip_block(existing)
     if uninstall:
         return "\n".join(kept) + ("\n" if kept else "")
     if kept and kept[-1] != "":
         kept.append("")
-    kept.extend(render_block(root, python))
+    kept.extend(render_block(root, python, watchlist, state))
     return "\n".join(kept) + "\n"
 
 
-def windows_task_cmd(root=ROOT, python=None, uninstall=False):
+def windows_task_cmd(root=ROOT, python=None, uninstall=False, watchlist=None, state=None):
     if uninstall:
         return f'schtasks /Delete /TN "{TASK_NAME}" /F'
     python = python or sys.executable
-    tr = f'{python} {os.path.join(root, "scripts", "alerts.py")} --notify'
+    _, script, wl, st, data = _paths(root, watchlist, state)
+    # schtasks /TR has no working-directory flag; cd first and pass absolute paths.
+    tr = (
+        f'cmd /c cd /d \\"{data}\\" && \\"{python}\\" \\"{script}\\" '
+        f'--watchlist \\"{wl}\\" --state \\"{st}\\" --notify'
+    )
     return (
         f'schtasks /Create /TN "{TASK_NAME}" /SC MINUTE /MO 5 '
         f'/D MON,TUE,WED,THU,FRI /F /TR "{tr}"'
@@ -98,14 +123,57 @@ def redact_env(key, value):
     return value
 
 
-def dotenv_payload():
+def parse_dotenv(path):
+    data = {}
+    if not path or not os.path.isfile(path):
+        return data
+    with open(path) as f:
+        for raw in f:
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            k, v = k.strip(), v.strip().strip("'").strip('"')
+            if k:
+                data[k] = v
+    return data
+
+
+def write_dotenv(path, data):
     lines = ["# us-watchlist-alerts — gitignored. Sourced by the weekday cron job.",
              "# Never places trades."]
+    seen = set()
+    for k in ENV_KEYS:
+        v = (data.get(k) or "").strip()
+        if v:
+            lines.append(f"{k}={shlex.quote(v)}")
+            seen.add(k)
+    for k, v in data.items():
+        if k in seen or not str(v).strip():
+            continue
+        lines.append(f"{k}={shlex.quote(str(v))}")
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    with open(path, "w") as f:
+        f.write("\n".join(lines) + "\n")
+    return path
+
+
+def merge_dotenv(path):
+    """Merge current notify/path env into ``path``, quoting values for ``sh``."""
+    data = parse_dotenv(path)
+    before = dict(data)
     for k in ENV_KEYS:
         v = (os.environ.get(k) or "").strip()
         if v:
-            lines.append(f"{k}={v}")
-    return "\n".join(lines) + "\n"
+            data[k] = v
+    if not data:
+        return False
+    if data == before and os.path.isfile(path):
+        return False
+    write_dotenv(path, data)
+    return True
 
 
 def read_crontab():
@@ -142,20 +210,26 @@ def _is_windows():
     return sys.platform == "win32"
 
 
-def run(action="install", dry_run=False, root=ROOT, python=None, platform=None):
+def run(action="install", dry_run=False, root=ROOT, python=None, platform=None,
+        watchlist=None, state=None):
     """Install, uninstall, or dry-run. Returns ``(exit_code, lines)``."""
-    load_dotenv()
     python = python or sys.executable
+    _, _, wl, st, data = _paths(root, watchlist, state)
+    env_file = dotenv_path(wl)
+    load_dotenv(env_file)
+    if os.path.abspath(env_file) != os.path.abspath(DOTENV):
+        load_dotenv(DOTENV)
     win = (_is_windows() if platform is None else platform == "win32")
     lines = []
 
     if action == "uninstall":
         if win:
-            cmd = windows_task_cmd(root, python, uninstall=True)
+            cmd = windows_task_cmd(root, python, uninstall=True, watchlist=wl, state=st)
             lines.append("Windows — run this in an elevated Command Prompt (not installed for you):")
             lines.append(cmd)
             return 0, lines
-        new = merge_crontab(read_crontab() if not dry_run else "", uninstall=True, root=root, python=python)
+        new = merge_crontab(read_crontab() if not dry_run else "", uninstall=True,
+                            root=root, python=python, watchlist=wl, state=st)
         if dry_run:
             lines.append("Would remove the us-watchlist-alerts cron block.")
             return 0, lines
@@ -173,17 +247,17 @@ def run(action="install", dry_run=False, root=ROOT, python=None, platform=None):
         lines.append("Then re-run. Or use WATCHLIST_NOTIFY=file and WATCHLIST_NOTIFY_FILE for a local log.")
         return 2, lines
 
-    job = cron_job_line(root, python)
+    job = cron_job_line(root, python, wl, st)
     if win:
         lines.append("Windows — Task Scheduler is not auto-installed. Run this in an elevated Command Prompt:")
-        lines.append(windows_task_cmd(root, python))
-        lines.append(f'Set "Start in" to: {root}')
+        lines.append(windows_task_cmd(root, python, watchlist=wl, state=st))
+        lines.append(f'The command cds to the data directory: {data}')
         lines.append("Set WATCHLIST_NOTIFY and the sink env (NTFY_TOPIC / Slack / webhook) on the task.")
         lines.append("alerts.py stays silent on NYSE holidays and empty checks.")
     else:
         lines.append("Weekday cron (every 5 minutes, Mon–Fri). Holidays/off-hours stay silent via market_calendar:")
         lines.append(job)
-        lines.append(f"Working directory: {root}")
+        lines.append(f"Working directory (watchlist + state + .env): {data}")
         lines.append("The job sources .env in that directory if present (gitignored).")
 
     if dry_run:
@@ -195,13 +269,10 @@ def run(action="install", dry_run=False, root=ROOT, python=None, platform=None):
             lines.append("crontab not found. Install cron, or copy the line above into your scheduler.")
             return 1, lines
         existing = read_crontab()
-        write_crontab(merge_crontab(existing, root=root, python=python))
-        if not os.path.isfile(DOTENV):
-            payload = dotenv_payload()
-            if "WATCHLIST_NOTIFY=" in payload:
-                with open(DOTENV, "w") as f:
-                    f.write(payload)
-                lines.append(f"Wrote {DOTENV} (gitignored) from the current environment.")
+        write_crontab(merge_crontab(existing, root=root, python=python, watchlist=wl, state=st))
+        existed = os.path.isfile(env_file)
+        if merge_dotenv(env_file):
+            lines.append(f"{'Updated' if existed else 'Wrote'} {env_file} (gitignored) from the current environment.")
         lines.append("Installed weekday cron. Log: alerts.log in the working directory.")
 
     results = send_test_ping()

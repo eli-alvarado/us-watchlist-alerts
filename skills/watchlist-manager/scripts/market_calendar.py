@@ -9,6 +9,7 @@ Regular holidays and early closes are rule-based. Unscheduled closures come from
    (official weekdays-with-no-session; see ``refresh_official_calendar``)
 """
 from __future__ import annotations
+import argparse
 import datetime as dt
 import json
 import os
@@ -66,6 +67,24 @@ def _observed(d):
     if d.weekday() == 6:
         return d + dt.timedelta(days=1)
     return d
+
+
+def parse_iso(s):
+    """Parse an ISO datetime. Accepts a trailing ``Z`` (Python 3.10 ``fromisoformat`` does not)."""
+    raw = (s or "").strip()
+    if not raw:
+        raise ValueError("empty datetime")
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        now = dt.datetime.fromisoformat(raw)
+    except ValueError as e:
+        raise ValueError(
+            f"invalid --now {s!r} (use ISO 8601, e.g. 2026-10-15T15:00:00-04:00)"
+        ) from e
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=ET)
+    return now
 
 
 def parse_dates(values):
@@ -188,6 +207,32 @@ def next_trading_day(d: dt.date, extra=None) -> dt.date:
     while not is_trading_day(d, extra=extra):
         d += dt.timedelta(days=1)
     return d
+
+
+def previous_trading_day(d: dt.date, extra=None) -> dt.date:
+    d -= dt.timedelta(days=1)
+    while not is_trading_day(d, extra=extra):
+        d -= dt.timedelta(days=1)
+    return d
+
+
+def trading_session_date(now: dt.datetime, extra=None) -> dt.date:
+    """ET date of the regular session whose last print is currently shown.
+
+    Regular hours and after the same day's close: that calendar day.
+    Pre-open and overnight before 09:30 ET: the previous trading day, so
+    daily-event de-dupe does not treat yesterday's close as a new "today".
+    """
+    now = now.astimezone(ET)
+    today = now.date()
+    sess = session(now, extra=extra)
+    if sess in ("regular", "after"):
+        return today
+    if now.time() < dt.time(9, 30):
+        return previous_trading_day(today, extra=extra)
+    if is_trading_day(today, extra=extra):
+        return today
+    return previous_trading_day(today, extra=extra)
 
 
 def closures_from_trading_days(year, open_dates):
@@ -314,8 +359,19 @@ def refresh_official_calendar(year, fetch=None, cache_path=None, today=None):
     return set_official_closures(mapping)
 
 
-if __name__ == "__main__":
-    n = dt.datetime.now(ET)
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        description="Print the NYSE session in US/Eastern. Library helpers live in this module too.",
+    )
+    ap.add_argument("when", nargs="?", help="ISO date (YYYY-MM-DD) or datetime (default: now)")
+    a = ap.parse_args(argv)
+    if a.when:
+        if "T" in a.when or " " in a.when or ":" in a.when:
+            n = parse_iso(a.when)
+        else:
+            n = dt.datetime.combine(dt.date.fromisoformat(a.when[:10]), dt.time(12, 0), tzinfo=ET)
+    else:
+        n = dt.datetime.now(ET)
     try:
         refresh_official_calendar(n.year)
     except Exception as e:
@@ -323,3 +379,8 @@ if __name__ == "__main__":
     why = holiday_name(n.date()) or ""
     extra = f" holiday={why}" if why else ""
     print(f"{n:%Y-%m-%d %H:%M %Z} session={session(n)} trading_day={is_trading_day(n.date())}{extra}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -219,12 +219,20 @@ def render(symbol, fixture=None, watchlist=None, style="line", sma_ns=None,
         closes = closes + [float(q["price"])]
     wl = wlm.load(watchlist) if watchlist and os.path.exists(watchlist) else None
     levels = levels_from_watchlist(wl, symbol)
-    smas = {f"sma{n}": sma_series(closes, n) for n in sma_ns}
+    smas, sma_notes = {}, []
+    for n in sma_ns:
+        series = sma_series(closes, n)
+        if not series or all(v is None for v in series):
+            sma_notes.append(f"sma{n} skipped (not enough history)")
+        else:
+            smas[f"sma{n}"] = series
     last = closes[-1] if closes else q.get("price")
     pc = q.get("prev_close")
     chg = f" {(last - pc) / pc * 100:+.2f}%" if last and pc else ""
     title = f"{q.get('symbol', symbol.upper())}  ${last:.2f}{chg}  ({q.get('source') or 'quote'})"
     text = ascii_chart(closes, levels=levels, smas=smas, title=title)
+    if sma_notes:
+        text = text + "\n" + "; ".join(sma_notes)
     backend = "ascii"
     path = None
     if out:
@@ -248,17 +256,27 @@ def main(argv=None):
     ap.add_argument("symbol")
     ap.add_argument("--style", choices=("line", "candle"), default="line")
     ap.add_argument("--sma", default="20,50", help="comma-separated SMA windows, or '' for none")
-    ap.add_argument("--watchlist", default=os.environ.get("WATCHLIST_FILE") or "watchlist.json")
+    ap.add_argument("--watchlist", default=None,
+                    help="watchlist path (default: $WATCHLIST_FILE or shared user/project location)")
     ap.add_argument("--fixture")
     ap.add_argument("--out", help="PNG path when matplotlib is installed; ASCII otherwise")
-    ap.add_argument("--provider", default="auto")
+    ap.add_argument("--provider", default=os.environ.get("WATCHLIST_PROVIDER", "auto"))
     a = ap.parse_args(argv)
     sma_ns = []
     if a.sma.strip():
-        sma_ns = [int(x) for x in a.sma.split(",") if x.strip()]
-    wl = a.watchlist if os.path.exists(a.watchlist) else None
-    result = render(a.symbol, fixture=a.fixture, watchlist=wl, style=a.style,
-                    sma_ns=sma_ns, out=a.out, provider=a.provider)
+        try:
+            sma_ns = [int(x) for x in a.sma.split(",") if x.strip()]
+        except ValueError:
+            print("error: --sma must be comma-separated integers (e.g. 20,50)", file=sys.stderr)
+            return 1
+    wl_path = a.watchlist or wlm.default_watchlist_path()
+    wl = wl_path if os.path.exists(wl_path) else None
+    try:
+        result = render(a.symbol, fixture=a.fixture, watchlist=wl, style=a.style,
+                        sma_ns=sma_ns, out=a.out, provider=a.provider)
+    except (qt.QuoteError, ValueError, OSError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     print(result["text"])
     return 0
 

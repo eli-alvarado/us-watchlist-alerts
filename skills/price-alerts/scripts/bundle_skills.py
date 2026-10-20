@@ -1,6 +1,6 @@
 """Copy root scripts + holiday data into each skill folder so `npx skills add` ships a runner."""
 from __future__ import annotations
-import os, shutil, sys
+import argparse, os, shutil, sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SKILLS = ("price-alerts", "watchlist-brief", "watchlist-manager")
@@ -32,7 +32,13 @@ def bundle():
     return copied
 
 
-if __name__ == "__main__":
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.parse_args(argv)
     for p in bundle():
         print(p)
-    sys.exit(0)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

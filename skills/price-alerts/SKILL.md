@@ -8,20 +8,24 @@ description: Check a US stock watchlist for price alerts - price above/below, % 
 Evaluates alert rules from the watchlist (see `watchlist-manager`) against fresh quotes and reports **only new** alerts.
 **Not financial advice. Never place, modify or cancel orders** - even if an alert fires, even if a broker tool is connected, unless the user explicitly confirms that specific order in this conversation.
 
-`scripts/` ships **next to this SKILL.md** (copied by `npx skills add`). Run from this skill folder, or from a git clone of the repo (root `scripts/` is the same files).
+`scripts/` ships **next to this SKILL.md** (copied by `npx skills add`). Run them **from the project root by path** (do not `cd` into this skill folder — that directory is replaced on `npx skills add`):
+
+`python3 .claude/skills/price-alerts/scripts/alerts.py` (Claude Code) or `python3 .agents/skills/price-alerts/scripts/alerts.py` (Cursor / Codex / Gemini CLI). From a git clone, `python3 scripts/alerts.py` at the repo root is the same files.
+
+**Watchlist location** (shared with `watchlist-manager` and `watchlist-brief`; survives reinstall): `$WATCHLIST_FILE` if set, else `./watchlist.json` in the project directory, else `~/.config/us-watchlist-alerts/watchlist.json` (`%APPDATA%\us-watchlist-alerts\` on Windows; `$XDG_CONFIG_HOME/us-watchlist-alerts/` when that env is set). A leftover in-skill `watchlist.json` is copied to the user-config dir on first run. Alert state defaults to `.alert_state.json` next to that file (`$ALERT_STATE_FILE` overrides).
 
 ## Run it
 ```bash
 python3 scripts/watchlist.py init                                                         # empty watchlist if missing
 python3 scripts/watchlist.py init --example                                               # sample AAPL/TSLA/NVDA (fixture-era levels)
-python3 scripts/quickstart.py                                                             # offline fixture demo (labeled, not live)
-python3 scripts/alerts.py --watchlist watchlist.json --state .alert_state.json           # text output
+python3 scripts/quickstart.py                                                             # offline fixture demo; does not write watchlist.json
+python3 scripts/alerts.py                                                                 # uses the shared watchlist + state paths
 python3 scripts/alerts.py --format json                                                    # machine-readable
 python3 scripts/alerts.py --force-session                                                  # evaluate on weekends / holidays too
 python3 scripts/alerts.py --dry-run                                                        # don't update cooldown state
 python3 scripts/alerts.py --notify                                                         # also deliver via WATCHLIST_NOTIFY sinks
 python3 scripts/schedule.py                                                                # weekday cron every 5 min (always-on; --dry-run / uninstall)
-python3 scripts/chart.py AAPL --watchlist watchlist.json                                   # ASCII chart; --out png if matplotlib
+python3 scripts/chart.py AAPL                                                              # ASCII chart; --out png if matplotlib
 python3 scripts/market_calendar.py                                                         # current ET session
 ```
 Output: `ALERT <message>` lines, or `no new alerts`, or `market closed, showing last regular close` after the bell (last regular print; no `--force-session` needed). Weekends and full-day holidays stay silent (`market closed (weekend|holiday). Next session YYYY-MM-DD`) unless `--force-session`. Data errors go to stderr as `WARN` (including `earnings_error` / `iv_error`). `NOTIFY <sink>` confirms delivery; sink failures are `WARN notify …` and must not abort the check. Never treat a notify sink as a broker.
@@ -52,7 +56,7 @@ Any rule may set `cooldown_minutes` to override `settings.cooldown_minutes`.
 
 ## Anti-spam rules (implemented in `scripts/alerts.py`, state in `.alert_state.json`)
 - **Level alerts latch**: once fired they stay silent until price moves back through the level by `rearm_pct` (default 0.5%). A stock hovering at $240 never pings repeatedly. `iv_*` rearms when ATM IV no longer breaches the threshold.
-- **Daily-event alerts** fire at most once per trading day per ticker/type.
+- **Daily-event alerts** fire at most once per **session date of the data shown** per ticker/type. Pre-open / overnight runs key on the previous session (last close), not the wall-clock calendar date, so they do not re-fire yesterday labeled as "today".
 - **Cooldown** (`cooldown_minutes`, default 240) applies to every re-fire.
 - **Cap** of `max_alerts_per_run` (default 20). Alerts past the cap are **not** written to state, so they can fire on the next run. If many fire, summarize ("7 alerts, 4 on TSLA") rather than dumping walls of text.
 - If the state file is missing or corrupt, start fresh but warn the user that duplicates are possible on this run.
@@ -80,9 +84,9 @@ Force one with `--provider` or `WATCHLIST_PROVIDER`. HTTP 429/5xx are retried; f
 
 **ATM IV:** only fetched for tickers with `iv_above`/`iv_below`. Unofficial Yahoo options chain (same crumb), then yfinance if installed. Nearest expiration, ATM call/put average as percent. Not IV rank. Failures set `iv_error` and print a WARN. `python3 scripts/quotes.py AAPL --iv` to inspect.
 
-**Notify (optional):** `WATCHLIST_NOTIFY=ntfy,slack,webhook,desktop,file` and/or `--notify`. See README for env vars. Do not notify on empty/skipped/dry-run. Delivery errors stay warnings.
+**Notify (optional):** `WATCHLIST_NOTIFY=ntfy,slack,webhook,desktop,file` and/or `--notify`. Env vars: https://github.com/eli-alvarado/us-watchlist-alerts/blob/main/README.md#configuration . Do not notify on empty/skipped/dry-run. Delivery errors stay warnings.
 
-**Known limits:** unscheduled closures live in `data/holidays_overrides.json` (incomplete) plus env/settings plus an optional Alpaca official calendar overlay (day-cached). Yahoo endpoints are unofficial. See `docs/LIMITATIONS.md`.
+**Known limits:** unscheduled closures live in `data/holidays_overrides.json` (incomplete) plus env/settings plus an optional Alpaca official calendar overlay (day-cached). Yahoo endpoints are unofficial. https://github.com/eli-alvarado/us-watchlist-alerts/blob/main/docs/LIMITATIONS.md
 
 **MCP option:** if an `alpaca` MCP server (alpacahq/alpaca-mcp-server) or `tradingview` MCP (atilaahmettaner/tradingview-mcp) is connected, you may use it for quotes/indicators instead of the scripts, then apply the exact same rules and anti-spam logic (read/write `.alert_state.json` in the same format). Use broker MCPs for **read-only** calls only.
 
@@ -93,7 +97,7 @@ Force one with `--provider` or `WATCHLIST_PROVIDER`. HTTP 429/5xx are retried; f
 - TSLA down -6.0% today, gapped down -5.0%, volume 3.0x avg
 - TSLA reports earnings in 1 day (2026-10-16)
 ```
-Group by ticker, include the stored thesis/stop/target for context, no recommendations. If no alerts: one short line, or stay silent when running on a heartbeat (see `HEARTBEAT.md`).
+Group by ticker, include the stored thesis/stop/target for context, no recommendations. If no alerts: one short line, or stay silent when running on a heartbeat (https://github.com/eli-alvarado/us-watchlist-alerts/blob/main/HEARTBEAT.md).
 
 ## Creating alerts from chat
-"Alert me if AAPL drops below 200" -> `python scripts/watchlist.py update AAPL --alert price_below:200 --append` (add the ticker first if missing). Confirm the rule back in plain English.
+"Alert me if AAPL drops below 200" -> `python3 scripts/watchlist.py update AAPL --alert price_below:200 --append` (add the ticker first if missing). Confirm the rule back in plain English.

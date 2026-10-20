@@ -1,4 +1,4 @@
-import copy, datetime as dt, importlib.util, io, json, os, sys, tempfile, unittest, urllib.error, warnings
+import copy, datetime as dt, importlib.util, io, json, os, shutil, sys, tempfile, unittest, urllib.error, warnings
 from unittest import mock
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -9,6 +9,36 @@ WL = os.path.join(ROOT, "tests", "fixtures", "watchlist.json")
 ET = mc.ET
 def T(s): return dt.datetime.fromisoformat(s).replace(tzinfo=ET)
 def quotes(): return {s: qt.get_quote(s, fixture=FX) for s in ("AAPL", "TSLA", "NVDA")}
+
+
+def _clear_path_env():
+    """Drop path overrides so resolution tests see the real defaults."""
+    os.environ.pop("WATCHLIST_FILE", None)
+    os.environ.pop("ALERT_STATE_FILE", None)
+
+
+class IsolatedDataDir:
+    """XDG config + optional chdir; never touch the real ~/.config."""
+
+    def __init__(self, chdir=None):
+        self._tmp = tempfile.mkdtemp()
+        self.xdg = os.path.join(self._tmp, "config")
+        os.makedirs(self.xdg)
+        self.chdir = chdir
+        self._cwd = os.getcwd()
+        self._patch = mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": self.xdg}, clear=False)
+
+    def __enter__(self):
+        self._patch.start()
+        _clear_path_env()
+        if self.chdir:
+            os.chdir(self.chdir)
+        return self
+
+    def __exit__(self, *exc):
+        os.chdir(self._cwd)
+        self._patch.stop()
+        shutil.rmtree(self._tmp, ignore_errors=True)
 
 
 class Calendar(unittest.TestCase):
@@ -37,6 +67,17 @@ class Calendar(unittest.TestCase):
         self.assertEqual(mc.session(dt.datetime(2026, 10, 15, 14, 0, tzinfo=dt.timezone.utc)), "regular")
     def test_next_trading_day(self):
         self.assertEqual(mc.next_trading_day(dt.date(2026, 11, 25)), dt.date(2026, 11, 27))
+    def test_previous_trading_day(self):
+        self.assertEqual(mc.previous_trading_day(dt.date(2026, 10, 16)), dt.date(2026, 10, 15))
+        self.assertEqual(mc.previous_trading_day(dt.date(2026, 10, 19)), dt.date(2026, 10, 16))  # Monday → Friday
+    def test_trading_session_date_preopen_is_prior_session(self):
+        self.assertEqual(mc.trading_session_date(T("2026-10-15T15:00")), dt.date(2026, 10, 15))
+        self.assertEqual(mc.trading_session_date(T("2026-10-15T18:30")), dt.date(2026, 10, 15))
+        self.assertEqual(mc.trading_session_date(T("2026-10-15T21:30")), dt.date(2026, 10, 15))
+        self.assertEqual(mc.trading_session_date(T("2026-10-16T00:05")), dt.date(2026, 10, 15))
+        self.assertEqual(mc.trading_session_date(T("2026-10-16T09:00")), dt.date(2026, 10, 15))
+        self.assertEqual(mc.trading_session_date(T("2026-10-16T09:30")), dt.date(2026, 10, 16))
+        self.assertEqual(mc.trading_session_date(T("2026-10-19T00:05")), dt.date(2026, 10, 16))
     def test_holiday_name(self):
         self.assertEqual(mc.holiday_name(dt.date(2026, 11, 26)), "Thanksgiving Day")
         self.assertIsNone(mc.holiday_name(dt.date(2026, 10, 15)))
@@ -198,6 +239,21 @@ class Alerts(unittest.TestCase):
         self.assertEqual(alerts.run(self.wl, st, self.q, T("2026-10-15T15:00"))["alerts"], [])
         nxt = alerts.run(self.wl, st, self.q, T("2026-10-16T10:00"))["alerts"]
         self.assertTrue({a["type"] for a in nxt} <= alerts.DAILY and nxt)  # daily events may refire next day; latched levels don't
+    def test_overnight_does_not_refire_daily_events(self):
+        st = {"fired": {}}
+        first = alerts.run(self.wl, st, self.q, T("2026-10-15T15:00"))
+        self.assertTrue(first["alerts"])
+        self.assertTrue(any(a["type"] in alerts.DAILY for a in first["alerts"]))
+        for ts in ("2026-10-16T00:05", "2026-10-16T04:05", "2026-10-16T09:00"):
+            nxt = alerts.run(self.wl, st, self.q, T(ts))
+            self.assertFalse(nxt["skipped"], ts)
+            self.assertTrue(nxt.get("last_close"), ts)
+            self.assertEqual(nxt["alerts"], [], msg=ts)
+    def test_preopen_pct_message_uses_session_date_not_today(self):
+        res = alerts.run(self.wl, {"fired": {}}, self.q, T("2026-10-16T00:05"))
+        msgs = [a["message"] for a in res["alerts"]]
+        self.assertTrue(any("on 2026-10-15" in m for m in msgs), msgs)
+        self.assertFalse(any(m.endswith("% today") for m in msgs), msgs)
     def test_level_rearm_hysteresis(self):
         wl = {"settings": {"cooldown_minutes": 1}, "tickers": [{"symbol": "AAPL", "alerts": [{"type": "price_above", "value": 240}]}]}
         st = {"fired": {}}; q = copy.deepcopy(self.q)
@@ -1238,11 +1294,18 @@ class LiveSnapshot(unittest.TestCase):
 
 class Schedule(unittest.TestCase):
     def test_cron_block_roundtrip(self):
-        job = sched.cron_job_line("/tmp/repo", "/usr/bin/python3")
+        job = sched.cron_job_line("/tmp/repo", "/usr/bin/python3",
+                                  watchlist="/tmp/data/watchlist.json",
+                                  state="/tmp/data/.alert_state.json")
         self.assertTrue(job.startswith("*/5 * * * 1-5 "))
-        self.assertIn("scripts/alerts.py --notify", job)
+        self.assertIn("alerts.py", job)
+        self.assertIn("--notify", job)
+        self.assertIn("cd /tmp/data", job)
+        self.assertIn("--watchlist /tmp/data/watchlist.json", job)
         existing = "MAILTO=me\n0 8 * * * echo hi\n"
-        merged = sched.merge_crontab(existing, root="/tmp/repo", python="/usr/bin/python3")
+        merged = sched.merge_crontab(existing, root="/tmp/repo", python="/usr/bin/python3",
+                                     watchlist="/tmp/data/watchlist.json",
+                                     state="/tmp/data/.alert_state.json")
         self.assertIn(sched.BEGIN, merged)
         self.assertIn(job, merged)
         self.assertIn("MAILTO=me", merged)
@@ -1252,10 +1315,15 @@ class Schedule(unittest.TestCase):
         self.assertIn("MAILTO=me", gone)
 
     def test_windows_prints_schtasks(self):
-        cmd = sched.windows_task_cmd("/c/repo", "python.exe")
+        cmd = sched.windows_task_cmd("/c/repo", "python.exe",
+                                     watchlist="C:\\data\\watchlist.json",
+                                     state="C:\\data\\.alert_state.json")
         self.assertIn("schtasks /Create", cmd)
         self.assertIn("MINUTE /MO 5", cmd)
-        self.assertIn("alerts.py --notify", cmd)
+        self.assertIn("alerts.py", cmd)
+        self.assertIn("--notify", cmd)
+        self.assertIn("cd /d", cmd)
+        self.assertIn("C:\\data", cmd)
         self.assertIn("schtasks /Delete", sched.windows_task_cmd(uninstall=True))
 
     def test_dry_run_does_not_write_crontab_or_ping(self):
@@ -1281,20 +1349,22 @@ class Schedule(unittest.TestCase):
     def test_install_writes_crontab_and_test_ping(self):
         d = tempfile.mkdtemp()
         path = os.path.join(d, "n.jsonl")
+        wl = os.path.join(d, "watchlist.json")
         env = {"WATCHLIST_NOTIFY": "file", "WATCHLIST_NOTIFY_FILE": path}
         written = []
         with mock.patch.dict(os.environ, env, clear=False), \
              mock.patch.object(sched, "read_crontab", return_value=""), \
              mock.patch.object(sched, "write_crontab", side_effect=lambda t: written.append(t)), \
-             mock.patch.object(sched.shutil, "which", return_value="/usr/bin/crontab"), \
-             mock.patch.object(sched, "DOTENV", os.path.join(d, ".env")):
+             mock.patch.object(sched.shutil, "which", return_value="/usr/bin/crontab"):
             rc, lines = sched.run(action="install", dry_run=False, platform="linux",
-                                  root=d, python="python3")
+                                  root=d, python="python3", watchlist=wl)
         self.assertEqual(rc, 0, lines)
         self.assertTrue(written)
         self.assertIn("*/5 * * * 1-5", written[0])
+        self.assertIn("--watchlist", written[0])
         self.assertTrue(os.path.exists(path) and os.path.getsize(path) > 0)
         self.assertTrue(any("Test ping ok" in x for x in lines))
+        self.assertTrue(os.path.isfile(os.path.join(d, ".env")))
 
     def test_windows_dry_run_prints_task(self):
         env = {"WATCHLIST_NOTIFY": "file", "WATCHLIST_NOTIFY_FILE": "/tmp/x.jsonl"}
@@ -1320,16 +1390,379 @@ class Schedule(unittest.TestCase):
         d = tempfile.mkdtemp()
         path = os.path.join(d, "watchlist.json")
         buf = io.StringIO()
-        with mock.patch("sys.stdout", buf), mock.patch.object(qs, "ROOT", d):
+        with IsolatedDataDir(chdir=d), mock.patch("sys.stdout", buf), mock.patch.object(qs, "ROOT", d):
             rc = qs.main(["--file", path])
         self.assertEqual(rc, 0)
-        wl = wlm.load(path)
-        self.assertGreaterEqual(len(wl["tickers"]), 1)
-        self.assertEqual({t["symbol"] for t in wl["tickers"]}, {"AAPL", "TSLA", "NVDA"})
+        self.assertFalse(os.path.exists(path), "quickstart must not write the user watchlist")
         out = buf.getvalue()
         self.assertIn("FIXTURE DEMO", out)
-        self.assertIn("SAMPLE DATA", out)
+        self.assertIn("does not write watchlist.json", out)
         self.assertIn("ALERT", out)
+
+
+def _copy_skill(dest_parent, name="price-alerts"):
+    dest = os.path.join(dest_parent, name)
+    shutil.copytree(os.path.join(ROOT, "skills", name), dest)
+    return dest
+
+
+class WatchlistPaths(unittest.TestCase):
+    def test_watchlist_file_env_wins(self):
+        d = tempfile.mkdtemp()
+        target = os.path.join(d, "custom.json")
+        with IsolatedDataDir(), mock.patch.dict(os.environ, {"WATCHLIST_FILE": target}):
+            self.assertEqual(wlm.default_watchlist_path(), target)
+            self.assertEqual(wlm.default_state_path(), os.path.join(d, ".alert_state.json"))
+
+    def test_project_cwd_file_used_when_present(self):
+        proj = tempfile.mkdtemp()
+        wl = os.path.join(proj, "watchlist.json")
+        with open(wl, "w") as f:
+            json.dump({"version": 1, "settings": {}, "tickers": []}, f)
+        with IsolatedDataDir(chdir=proj):
+            self.assertEqual(os.path.abspath(wlm.default_watchlist_path()), os.path.abspath(wl))
+
+    def test_skill_folder_defaults_to_user_config(self):
+        proj = tempfile.mkdtemp()
+        skill = _copy_skill(proj)
+        with IsolatedDataDir(chdir=skill) as iso:
+            got = os.path.abspath(wlm.default_watchlist_path())
+            self.assertEqual(got, os.path.join(iso.xdg, "us-watchlist-alerts", "watchlist.json"))
+            self.assertTrue(wlm.is_skill_install_dir(skill))
+
+    def test_legacy_in_skill_watchlist_is_migrated(self):
+        proj = tempfile.mkdtemp()
+        skill = _copy_skill(proj)
+        legacy = os.path.join(skill, "watchlist.json")
+        with open(legacy, "w") as f:
+            json.dump({"version": 1, "settings": {}, "tickers": [{"symbol": "MSFT", "side": "long"}]}, f)
+        with IsolatedDataDir(chdir=skill) as iso:
+            got = wlm.default_watchlist_path()
+            dest = os.path.join(iso.xdg, "us-watchlist-alerts", "watchlist.json")
+            self.assertEqual(os.path.abspath(got), os.path.abspath(dest))
+            self.assertEqual(wlm.load(got)["tickers"][0]["symbol"], "MSFT")
+
+
+class Journeys(unittest.TestCase):
+    """First-time user / agent journeys from the QA report."""
+
+    def test_fresh_install_init_add_alerts_no_stale(self):
+        proj = tempfile.mkdtemp()
+        skill = _copy_skill(proj)
+        with IsolatedDataDir(chdir=proj):
+            self.assertEqual(wlm.main(["init"]), 0)
+            wl = wlm.default_watchlist_path()
+            self.assertEqual(os.path.abspath(wl), os.path.join(proj, "watchlist.json"))
+            self.assertEqual(wlm.main(["add", "AAPL", "--alert", "pct_change_down:3"]), 0)
+            self.assertEqual(wlm.main(["add", "NVDA", "--stop", "140"]), 0)
+            buf = io.StringIO()
+            with mock.patch("sys.stdout", buf):
+                rc = alerts.main(["--watchlist", wl, "--state", os.path.join(proj, ".s.json"),
+                                  "--fixture", FX, "--now", "2026-10-15T11:00:00-04:00"])
+            self.assertEqual(rc, 0)
+            out = buf.getvalue()
+            self.assertNotIn("above $240", out)
+            self.assertNotIn("reached target", out)
+            self.assertNotIn("golden cross", out)
+            self.assertEqual({t["symbol"] for t in wlm.load(wl)["tickers"]}, {"AAPL", "NVDA"})
+            self.assertFalse(os.path.exists(os.path.join(skill, "watchlist.json")))
+
+    def test_quickstart_then_add_works(self):
+        import quickstart as qs
+        proj = tempfile.mkdtemp()
+        skill = _copy_skill(proj)
+        with IsolatedDataDir(chdir=skill):
+            buf = io.StringIO()
+            with mock.patch("sys.stdout", buf):
+                rc = qs.main([])
+            self.assertEqual(rc, 0, buf.getvalue())
+            self.assertIn("FIXTURE DEMO", buf.getvalue())
+            self.assertFalse(os.path.exists(os.path.join(skill, "watchlist.json")))
+            self.assertFalse(os.path.exists(os.path.join(skill, ".quickstart_state.json")))
+            err = io.StringIO()
+            with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+                rc = wlm.main(["add", "AAPL", "--alert", "pct_change_down:3"])
+            self.assertEqual(rc, 0, err.getvalue())
+            wl = wlm.default_watchlist_path()
+            self.assertEqual([t["symbol"] for t in wlm.load(wl)["tickers"]], ["AAPL"])
+            out = io.StringIO()
+            with mock.patch("sys.stdout", out):
+                rc = alerts.main(["--watchlist", wl, "--state", wlm.default_state_path(wl),
+                                  "--fixture", FX, "--now", "2026-10-15T11:00:00-04:00"])
+            self.assertEqual(rc, 0)
+            self.assertNotIn("above $240", out.getvalue())
+            self.assertNotIn("reached target", out.getvalue())
+
+    def test_reinstall_preserves_list(self):
+        proj = tempfile.mkdtemp()
+        skill = _copy_skill(proj)
+        with IsolatedDataDir(chdir=skill) as iso:
+            self.assertEqual(wlm.main(["init"]), 0)
+            self.assertEqual(wlm.main(["add", "AAPL"]), 0)
+            saved = wlm.default_watchlist_path()
+            self.assertTrue(saved.startswith(iso.xdg))
+            shutil.rmtree(skill)
+            skill2 = _copy_skill(proj)
+            os.chdir(skill2)
+            self.assertFalse(os.path.exists(os.path.join(skill2, "watchlist.json")))
+            self.assertEqual([t["symbol"] for t in wlm.load(wlm.default_watchlist_path())["tickers"]], ["AAPL"])
+            buf = io.StringIO()
+            with mock.patch("sys.stdout", buf):
+                self.assertEqual(wlm.main(["list"]), 0)
+            self.assertIn("AAPL", buf.getvalue())
+
+    def test_cross_skill_shared_list(self):
+        proj = tempfile.mkdtemp()
+        manager = _copy_skill(proj, "watchlist-manager")
+        alerts_skill = _copy_skill(proj, "price-alerts")
+        brief_skill = _copy_skill(proj, "watchlist-brief")
+        with IsolatedDataDir(chdir=manager) as iso:
+            self.assertEqual(wlm.main(["init"]), 0)
+            self.assertEqual(wlm.main(["add", "NVDA", "--alert", "pct_change_down:3"]), 0)
+            shared = os.path.join(iso.xdg, "us-watchlist-alerts", "watchlist.json")
+            self.assertEqual(os.path.abspath(wlm.default_watchlist_path()), os.path.abspath(shared))
+            os.chdir(alerts_skill)
+            self.assertEqual([t["symbol"] for t in wlm.load(wlm.default_watchlist_path())["tickers"]], ["NVDA"])
+            os.chdir(brief_skill)
+            self.assertEqual([t["symbol"] for t in wlm.load(wlm.default_watchlist_path())["tickers"]], ["NVDA"])
+
+    def test_overnight_journey_d_then_d1(self):
+        st = {"fired": {}}
+        wl = wlm.load(WL)
+        q = quotes()
+        day = alerts.run(wl, st, q, T("2026-10-15T15:00"))
+        self.assertTrue(day["alerts"])
+        for ts in ("2026-10-16T00:05", "2026-10-16T09:00"):
+            nxt = alerts.run(wl, st, q, T(ts))
+            self.assertEqual(nxt["alerts"], [], ts)
+
+
+class CliUx(unittest.TestCase):
+    """P1 / cheap P2 from the 2026-10-20 QA report."""
+
+    def test_watchlist_provider_env_reaches_alerts(self):
+        seen = []
+        def fake(sym, provider="auto", fixture=None, **kw):
+            seen.append(provider)
+            raise qt.QuoteError("alpaca", "ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY are not set")
+        env = {"WATCHLIST_PROVIDER": "alpaca", "ALPACA_API_KEY_ID": "", "ALPACA_API_SECRET_KEY": ""}
+        with mock.patch.dict(os.environ, env, clear=False), \
+             mock.patch.object(alerts.qt, "get_quote", side_effect=fake), \
+             mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", io.StringIO()):
+            rc = alerts.main(["--watchlist", WL, "--dry-run", "--now", "2026-10-15T10:00:00-04:00"])
+        self.assertTrue(seen)
+        self.assertEqual(seen[0], "alpaca")
+        self.assertEqual(rc, 3)
+
+    def test_all_quotes_failed_exits_3(self):
+        def boom(*a, **k):
+            raise RuntimeError("feed down")
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(alerts.qt, "get_quote", side_effect=boom), \
+             mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = alerts.main(["--watchlist", WL, "--dry-run", "--now", "2026-10-15T10:00:00-04:00"])
+        self.assertEqual(rc, 3)
+        self.assertIn("ERROR no quotes", err.getvalue())
+        self.assertNotIn("no new alerts", out.getvalue())
+
+    def test_empty_watchlist_hint(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        self.assertEqual(wlm.main(["init", "--file", path]), 0)
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = alerts.main(["--watchlist", path, "--now", "2026-10-15T10:00:00-04:00"])
+        self.assertEqual(rc, 0)
+        self.assertIn("Watchlist is empty", out.getvalue())
+        self.assertIn("watchlist.py add", out.getvalue())
+        self.assertNotIn("no new alerts", out.getvalue())
+        bout = io.StringIO()
+        with mock.patch("sys.stdout", bout), mock.patch("sys.stderr", io.StringIO()):
+            self.assertEqual(brief.main(["--watchlist", path, "--kind", "morning"]), 0)
+        self.assertIn("Watchlist is empty", bout.getvalue())
+
+    def test_unknown_symbol_is_short_no_alpaca_hint(self):
+        def yahoo_404(symbol):
+            raise qt.QuoteError("yahoo", '{"finance":{"error":{"code":"Not Found"}}}', status=404,
+                                hint="unknown symbol or endpoint")
+        with mock.patch.object(qt, "auto_order", return_value=["yahoo"]), \
+             mock.patch.dict(qt.PROVIDERS, {"yahoo": yahoo_404}):
+            with self.assertRaises(qt.QuoteError) as cm:
+                qt.get_quote("ZZZZ")
+        msg = str(cm.exception)
+        self.assertIn("ZZZZ: unknown symbol", msg)
+        self.assertNotIn("ALPACA", msg)
+        self.assertLess(len(msg), 120)
+
+    def test_provider_key_missing_hint_is_specific(self):
+        with mock.patch.dict(os.environ, {"FINNHUB_API_KEY": ""}, clear=False):
+            with self.assertRaises(qt.QuoteError) as cm:
+                qt.get_quote("AAPL", provider="finnhub")
+        msg = str(cm.exception)
+        self.assertIn("FINNHUB_API_KEY", msg)
+        self.assertNotIn("WATCHLIST_PROVIDER=yahoo", msg)
+
+    def test_watchlist_cli_friendly_errors(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        self.assertEqual(wlm.main(["init", "--file", path]), 0)
+        cases = [
+            (["add", "123", "--file", path], "bad symbol"),
+            (["add", "TOOLONGX", "--file", path], "bad symbol"),
+            (["add", "AMD", "--alert", "bogus_type:1", "--file", path], "unknown alert type"),
+            (["add", "AMD", "--alert", "price_below:abc", "--file", path], "must be a number"),
+            (["add", "AMD", "--stop", "200", "--entry", "100", "--file", path], "stop"),
+        ]
+        for argv, needle in cases:
+            err = io.StringIO()
+            with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+                rc = wlm.main(argv)
+            self.assertEqual(rc, 1, argv)
+            self.assertIn(needle, err.getvalue().lower(), argv)
+            self.assertNotIn("Traceback", err.getvalue(), argv)
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = wlm.main(["update", "ZZZ", "--stop", "1", "--file", path])
+        self.assertEqual(rc, 1)
+        self.assertIn("ZZZ not on watchlist", err.getvalue())
+        self.assertNotIn("'ZZZ'", err.getvalue())
+
+    def test_malformed_json_message(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        with open(path, "w") as f:
+            f.write("{bad")
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = wlm.main(["list", "--file", path])
+        self.assertEqual(rc, 1)
+        self.assertIn("not valid JSON", err.getvalue())
+        self.assertIn("line ", err.getvalue())
+        with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(alerts.main(["--watchlist", path]), 1)
+
+    def test_yaml_without_pyyaml_cleans_tmp(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "w.yaml")
+        real_import = __import__
+        def fake(name, *a, **k):
+            if name == "yaml":
+                raise ImportError("No module named yaml")
+            return real_import(name, *a, **k)
+        err = io.StringIO()
+        with mock.patch("builtins.__import__", side_effect=fake), \
+             mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = wlm.main(["add", "AMD", "--file", path])
+        self.assertEqual(rc, 1)
+        self.assertIn("pyyaml", err.getvalue().lower())
+        self.assertFalse(os.path.exists(path + ".tmp"))
+
+    def test_add_creates_parent_dirs(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "new", "sub", "x.json")
+        with mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(wlm.main(["add", "AMD", "--file", path]), 0)
+        self.assertTrue(os.path.isfile(path))
+
+    def test_chart_unknown_ticker_one_line(self):
+        err = io.StringIO()
+        with mock.patch.object(chart.qt, "get_quote", side_effect=qt.QuoteError("yahoo", "ZZZZ: unknown symbol (not found on yahoo)", bare=True)), \
+             mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = chart.main(["ZZZZ"])
+        self.assertEqual(rc, 1)
+        self.assertIn("error:", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+        err2 = io.StringIO()
+        with mock.patch("sys.stderr", err2), mock.patch("sys.stdout", io.StringIO()):
+            self.assertEqual(chart.main(["AAPL", "--sma", "abc"]), 1)
+        self.assertIn("--sma", err2.getvalue())
+
+    def test_chart_sma_not_enough_history_omitted(self):
+        q = {"symbol": "AAPL", "price": 10, "prev_close": 9, "closes": list(range(60)), "source": "fixture"}
+        with mock.patch.object(chart.qt, "get_quote", return_value=q):
+            text = chart.render("AAPL", sma_ns=[20, 500])["text"]
+        self.assertIn("sma20", text)
+        self.assertNotIn("sma500=+", text)
+        self.assertIn("not enough history", text)
+
+    def test_now_accepts_zulu_and_rejects_garbage(self):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch("sys.stdout", out), mock.patch("sys.stderr", err):
+            rc = alerts.main(["--watchlist", WL, "--fixture", FX, "--dry-run",
+                              "--now", "2026-10-15T15:00:00Z"])
+        self.assertEqual(rc, 0, err.getvalue())
+        err2 = io.StringIO()
+        with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", err2):
+            self.assertEqual(alerts.main(["--watchlist", WL, "--now", "garbage"]), 1)
+        self.assertIn("invalid --now", err2.getvalue())
+        self.assertNotIn("Traceback", err2.getvalue())
+
+    def test_market_calendar_cli_date(self):
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            self.assertEqual(mc.main(["2026-11-26"]), 0)
+        self.assertIn("2026-11-26", out.getvalue())
+        self.assertIn("session=closed", out.getvalue())
+        with mock.patch("sys.stdout", io.StringIO()), self.assertRaises(SystemExit) as cm:
+            mc.main(["--help"])
+        self.assertEqual(cm.exception.code, 0)
+
+    def test_bundle_help_does_not_run(self):
+        import bundle_skills as bs
+        with mock.patch.object(bs, "bundle") as b, self.assertRaises(SystemExit) as cm:
+            bs.main(["--help"])
+        self.assertEqual(cm.exception.code, 0)
+        b.assert_not_called()
+
+    def test_dotenv_merge_quotes_ampersand(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, ".env")
+        with open(path, "w") as f:
+            f.write("UNRELATED=keep\n")
+        env = {"WATCHLIST_NOTIFY": "webhook", "WATCHLIST_WEBHOOK_URL": "https://x.test/hook?a=1&b=2"}
+        with mock.patch.dict(os.environ, env, clear=False):
+            self.assertTrue(sched.merge_dotenv(path))
+        with open(path) as f:
+            text = f.read()
+        self.assertIn("UNRELATED=", text)
+        self.assertIn("WATCHLIST_NOTIFY=", text)
+        self.assertIn("WATCHLIST_WEBHOOK_URL=", text)
+        self.assertIn("&", text)
+        self.assertTrue("'" in text or '"' in text)
+
+    def test_windows_tr_quotes_spaces(self):
+        cmd = sched.windows_task_cmd(
+            r"C:\Program Files\repo", r"C:\Program Files\Python\python.exe",
+            watchlist=r"C:\Users\Me\My Data\watchlist.json",
+            state=r"C:\Users\Me\My Data\.alert_state.json",
+        )
+        self.assertIn("cd /d", cmd)
+        self.assertIn("Program Files", cmd)
+        self.assertIn('\\"', cmd)
+
+    def test_added_date_is_et(self):
+        wl = {"version": 1, "settings": {}, "tickers": []}
+        t = wlm.add(wl, "AMD")
+        self.assertEqual(t["added"], wlm._today_et().isoformat())
+        self.assertRegex(t["added"], r"^\d{4}-\d{2}-\d{2}$")
+
+    def test_brief_kind_defaults_by_session(self):
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out):
+            brief.main(["--watchlist", WL, "--fixture", FX, "--now", "2026-10-15T10:55:00-04:00"])
+        self.assertIn("intraday brief", out.getvalue())
+
+    def test_installed_skills_do_not_point_at_unshipped_docs(self):
+        for skill in ("price-alerts", "watchlist-manager", "watchlist-brief"):
+            path = os.path.join(ROOT, "skills", skill, "SKILL.md")
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            self.assertNotIn("`docs/LIMITATIONS.md`", text, skill)
+            self.assertNotIn("`HEARTBEAT.md`", text, skill)
+            self.assertNotIn("See README for env", text, skill)
+            self.assertNotIn("python scripts/", text, skill)
+            if "LIMITATIONS.md" in text:
+                self.assertIn("github.com/eli-alvarado/us-watchlist-alerts", text, skill)
 
 
 if __name__ == "__main__":

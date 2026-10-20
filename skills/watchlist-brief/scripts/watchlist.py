@@ -25,10 +25,123 @@ ALERT_TYPES = {"price_above", "price_below", "pct_change_up", "pct_change_down",
                "intraday_low_pct", "intraday_high_pct", "intraday_extreme_pct"}
 SESSIONS = {"regular", "pre", "after"}
 SIDES = {"long", "short", "watch"}
-DEFAULT_PATH = os.environ.get("WATCHLIST_FILE", "watchlist.json")
+WATCHLIST_BASENAME = "watchlist.json"
+STATE_BASENAME = ".alert_state.json"
+APP_DIRNAME = "us-watchlist-alerts"
 
 
 def _is_yaml(p): return p.endswith((".yaml", ".yml"))
+
+
+def is_skill_install_dir(path):
+    """True if ``path`` looks like an ``npx skills add`` skill folder (wiped on reinstall)."""
+    path = os.path.abspath(path)
+    return (
+        os.path.isfile(os.path.join(path, "SKILL.md"))
+        and os.path.isfile(os.path.join(path, "scripts", "watchlist.py"))
+        and os.path.isfile(os.path.join(path, "scripts", "alerts.py"))
+    )
+
+
+def user_data_dir():
+    """Stable dir shared by all three skills; survives skill reinstall.
+
+    ``$XDG_CONFIG_HOME/us-watchlist-alerts`` if set, else
+    ``~/.config/us-watchlist-alerts`` (Windows: ``%APPDATA%\\us-watchlist-alerts``).
+    Override the files directly with ``WATCHLIST_FILE`` / ``ALERT_STATE_FILE``.
+    """
+    xdg = (os.environ.get("XDG_CONFIG_HOME") or "").strip()
+    if xdg:
+        return os.path.join(os.path.abspath(os.path.expanduser(xdg)), APP_DIRNAME)
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or os.path.expanduser("~")
+        return os.path.join(base, APP_DIRNAME)
+    return os.path.join(os.path.expanduser("~"), ".config", APP_DIRNAME)
+
+
+def _legacy_skill_files(basename):
+    """In-skill leftover files from the pre-user-config layout."""
+    found, seen = [], set()
+    here = os.path.dirname(os.path.abspath(__file__))
+    skill_or_repo = os.path.dirname(here)
+    candidates = []
+    if is_skill_install_dir(skill_or_repo):
+        parent = os.path.dirname(skill_or_repo)
+        candidates.append(os.path.join(skill_or_repo, basename))
+        for name in ("price-alerts", "watchlist-manager", "watchlist-brief"):
+            candidates.append(os.path.join(parent, name, basename))
+    cwd = os.getcwd()
+    if is_skill_install_dir(cwd):
+        parent = os.path.dirname(cwd)
+        candidates.append(os.path.join(cwd, basename))
+        for name in ("price-alerts", "watchlist-manager", "watchlist-brief"):
+            candidates.append(os.path.join(parent, name, basename))
+    for p in candidates:
+        ap = os.path.abspath(p)
+        if ap in seen or not os.path.isfile(ap):
+            continue
+        seen.add(ap)
+        found.append(ap)
+    return found
+
+
+def _migrate_file(src, dest):
+    parent = os.path.dirname(os.path.abspath(dest))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    if not os.path.exists(dest):
+        shutil.copy2(src, dest)
+    return dest
+
+
+def default_watchlist_path():
+    """Resolve the watchlist path shared by manager / alerts / brief.
+
+    Order:
+    1. ``$WATCHLIST_FILE`` if set
+    2. ``./watchlist.json`` when cwd is a project directory (not a skill folder)
+       and the file already exists — the ``cd <project>`` journey
+    3. ``$XDG_CONFIG_HOME/us-watchlist-alerts/watchlist.json`` (or ``~/.config/...``),
+       after copying a leftover in-skill ``watchlist.json`` if the user file is new
+    4. For a *new* list: ``./watchlist.json`` in a project cwd, else the user-config path
+       (never write into a skill folder that ``npx skills add`` will replace)
+    """
+    env = (os.environ.get("WATCHLIST_FILE") or "").strip()
+    if env:
+        return env
+    cwd = os.getcwd()
+    cwd_file = os.path.join(cwd, WATCHLIST_BASENAME)
+    user_file = os.path.join(user_data_dir(), WATCHLIST_BASENAME)
+    if os.path.isfile(cwd_file) and not is_skill_install_dir(cwd):
+        return cwd_file
+    if os.path.isfile(user_file):
+        return user_file
+    legacy = _legacy_skill_files(WATCHLIST_BASENAME)
+    if legacy:
+        _migrate_file(legacy[0], user_file)
+        src_state = os.path.join(os.path.dirname(legacy[0]), STATE_BASENAME)
+        dest_state = os.path.join(user_data_dir(), STATE_BASENAME)
+        if os.path.isfile(src_state) and not os.path.isfile(dest_state):
+            _migrate_file(src_state, dest_state)
+        return user_file
+    if not is_skill_install_dir(cwd):
+        return cwd_file
+    return user_file
+
+
+def default_state_path(watchlist_path=None):
+    env = (os.environ.get("ALERT_STATE_FILE") or "").strip()
+    if env:
+        return env
+    wl = os.path.abspath(watchlist_path or default_watchlist_path())
+    parent = os.path.dirname(wl)
+    return os.path.join(parent or os.getcwd(), STATE_BASENAME)
+
+
+def __getattr__(name):
+    if name == "DEFAULT_PATH":
+        return default_watchlist_path()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def bundled_example():
@@ -62,19 +175,23 @@ def missing_watchlist_hint(path):
         f"No watchlist at {path}.",
         "Create one:  python3 scripts/watchlist.py init",
         "Sample data: python3 scripts/watchlist.py init --example",
+        "Defaults: $WATCHLIST_FILE, else ./watchlist.json in a project directory,",
+        f"else {os.path.join(user_data_dir(), WATCHLIST_BASENAME)} (shared, survives skill reinstall).",
     ]
     if ex:
         lines.append(f"Or pass:     --watchlist {ex}")
     return "\n".join(lines)
 
 
-def init_file(path=DEFAULT_PATH, *, example=False, empty=False):
+def init_file(path=None, *, example=False, empty=False):
     """Write an empty valid watchlist, or copy the bundled sample if ``example``.
 
     ``empty`` is accepted for compatibility; empty is already the default.
     """
     if example and empty:
         raise ValueError("pass only one of --example or --empty")
+    if path is None:
+        path = default_watchlist_path()
     if os.path.exists(path):
         raise FileExistsError(f"{path} already exists")
     parent = os.path.dirname(os.path.abspath(path))
@@ -90,15 +207,23 @@ def init_file(path=DEFAULT_PATH, *, example=False, empty=False):
     return path, "empty"
 
 
-def load(path=DEFAULT_PATH):
+def load(path=None):
+    if path is None:
+        path = default_watchlist_path()
     if not os.path.exists(path):
         return {"version": SCHEMA_VERSION, "settings": {}, "tickers": []}
-    with open(path) as f:
-        if _is_yaml(path):
-            import yaml
-            data = yaml.safe_load(f) or {}
-        else:
-            data = json.load(f)
+    try:
+        with open(path) as f:
+            if _is_yaml(path):
+                try:
+                    import yaml
+                except ImportError as e:
+                    raise ImportError("pip install pyyaml or use .json") from e
+                data = yaml.safe_load(f) or {}
+            else:
+                data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"{path} is not valid JSON (line {e.lineno} col {e.colno})") from e
     if not isinstance(data, dict):
         raise ValueError("watchlist root must be an object")
     data.setdefault("version", SCHEMA_VERSION)
@@ -107,26 +232,47 @@ def load(path=DEFAULT_PATH):
     return data
 
 
-def save(wl, path=DEFAULT_PATH):
+def save(wl, path=None):
+    if path is None:
+        path = default_watchlist_path()
     errs = validate(wl)
     if errs:
         raise ValueError("; ".join(errs))
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
     tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        if _is_yaml(path):
-            import yaml
-            yaml.safe_dump(wl, f, sort_keys=False)
-        else:
-            json.dump(wl, f, indent=2); f.write("\n")
-    os.replace(tmp, path)
+    try:
+        with open(tmp, "w") as f:
+            if _is_yaml(path):
+                try:
+                    import yaml
+                except ImportError as e:
+                    raise ImportError("pip install pyyaml or use .json") from e
+                yaml.safe_dump(wl, f, sort_keys=False)
+            else:
+                json.dump(wl, f, indent=2); f.write("\n")
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def parse_alert(s):
     """'price_below:110' -> {'type':'price_below','value':110.0}; 'golden_cross' -> {'type':...}"""
     t, _, v = s.partition(":")
-    a = {"type": t.strip()}
+    t = t.strip()
+    if t not in ALERT_TYPES:
+        raise ValueError(f"unknown alert type {t!r}")
+    a = {"type": t}
     if v:
-        a["value"] = float(v)
+        try:
+            a["value"] = float(v)
+        except ValueError:
+            raise ValueError(f"alert {t} value must be a number, not {v!r}") from None
     return a
 
 
@@ -173,11 +319,21 @@ def find(wl, sym):
     return next((t for t in wl["tickers"] if t["symbol"] == sym), None)
 
 
+def _today_et():
+    try:
+        from zoneinfo import ZoneInfo
+        return dt.datetime.now(ZoneInfo("America/New_York")).date()
+    except Exception:
+        return dt.date.today()
+
+
 def add(wl, sym, **kw):
     sym = sym.upper()
+    if not SYMBOL_RE.match(sym):
+        raise ValueError(f"bad symbol {sym!r}")
     if find(wl, sym):
         raise ValueError(f"{sym} already on watchlist; use update")
-    t = {"symbol": sym, "added": dt.date.today().isoformat(), "side": kw.get("side") or "long",
+    t = {"symbol": sym, "added": _today_et().isoformat(), "side": kw.get("side") or "long",
          "thesis": kw.get("thesis") or "", "entry": kw.get("entry"), "targets": kw.get("targets") or [],
          "stop": kw.get("stop"), "tags": kw.get("tags") or [], "alerts": kw.get("alerts") or [],
          "notes": kw.get("notes") or ""}
@@ -194,7 +350,7 @@ def update(wl, sym, **kw):
             t[k] = (t.get(k) or []) + v
         elif k != "append":
             t[k] = v
-    t["updated"] = dt.date.today().isoformat()
+    t["updated"] = _today_et().isoformat()
     return t
 
 
@@ -229,7 +385,9 @@ def _extract_file(argv):
 def main(argv=None):
     rest, file_override = _extract_file(argv)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--file", default=DEFAULT_PATH)
+    ap.add_argument("--file", default=None,
+                    help="watchlist path (default: $WATCHLIST_FILE, else ./watchlist.json "
+                         "in a project dir, else ~/.config/us-watchlist-alerts/watchlist.json)")
     sp = ap.add_subparsers(dest="cmd", required=True)
     for name in ("add", "update"):
         p = sp.add_parser(name); p.add_argument("symbol")
@@ -253,6 +411,8 @@ def main(argv=None):
     a = ap.parse_args(rest)
     if file_override:
         a.file = file_override
+    if not a.file:
+        a.file = default_watchlist_path()
     if a.cmd == "init":
         try:
             path, how = init_file(a.file, example=a.example, empty=a.empty)
@@ -265,36 +425,35 @@ def main(argv=None):
         else:
             print(f"wrote {path} (empty)")
         return 0
-    wl = load(a.file)
-    if a.cmd in ("add", "update"):
-        kw = {k: getattr(a, k) for k in ("thesis", "entry", "stop", "targets", "tags", "side", "notes")}
-        kw["alerts"] = [parse_alert(x) for x in (a.alerts or [])]
-        if a.cmd == "update": kw["append"] = a.append
-        try:
+    try:
+        wl = load(a.file)
+        if a.cmd in ("add", "update"):
+            kw = {k: getattr(a, k) for k in ("thesis", "entry", "stop", "targets", "tags", "side", "notes")}
+            kw["alerts"] = [parse_alert(x) for x in (a.alerts or [])]
+            if a.cmd == "update": kw["append"] = a.append
             t = (add if a.cmd == "add" else update)(wl, a.symbol, **kw)
-        except (ValueError, KeyError) as e:
-            print(e, file=sys.stderr); return 1
-        save(wl, a.file); print(json.dumps(t, indent=2)); return 0
-    elif a.cmd == "remove":
-        try:
+            save(wl, a.file); print(json.dumps(t, indent=2)); return 0
+        elif a.cmd == "remove":
             t = remove(wl, a.symbol)
-        except KeyError as e:
-            print(f"{e.args[0]} not on watchlist", file=sys.stderr); return 1
-        save(wl, a.file); print(f"removed {t['symbol']}"); return 0
-    elif a.cmd == "show":
-        t = find(wl, a.symbol)
-        if not t:
-            print(f"{a.symbol.upper()} not on watchlist", file=sys.stderr); return 1
-        print(json.dumps(t, indent=2)); return 0
-    elif a.cmd == "list":
-        for t in wl["tickers"]:
-            if a.tag and a.tag not in t.get("tags", []): continue
-            print(f"{t['symbol']:<7} entry={t.get('entry')} stop={t.get('stop')} targets={t.get('targets')} tags={','.join(t.get('tags', []))}  {t.get('thesis','')}")
+            save(wl, a.file); print(f"removed {t['symbol']}"); return 0
+        elif a.cmd == "show":
+            t = find(wl, a.symbol)
+            if not t:
+                print(f"{a.symbol.upper()} not on watchlist", file=sys.stderr); return 1
+            print(json.dumps(t, indent=2)); return 0
+        elif a.cmd == "list":
+            for t in wl["tickers"]:
+                if a.tag and a.tag not in t.get("tags", []): continue
+                print(f"{t['symbol']:<7} entry={t.get('entry')} stop={t.get('stop')} targets={t.get('targets')} tags={','.join(t.get('tags', []))}  {t.get('thesis','')}")
+            return 0
+        elif a.cmd == "validate":
+            errs = validate(wl)
+            print("OK" if not errs else "\n".join(errs)); return 1 if errs else 0
         return 0
-    elif a.cmd == "validate":
-        errs = validate(wl)
-        print("OK" if not errs else "\n".join(errs)); return 1 if errs else 0
-    return 0
+    except KeyError as e:
+        print(f"{e.args[0]} not on watchlist", file=sys.stderr); return 1
+    except (ValueError, OSError, json.JSONDecodeError, ImportError) as e:
+        print(f"error: {e}", file=sys.stderr); return 1
 
 
 if __name__ == "__main__":

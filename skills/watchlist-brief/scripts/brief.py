@@ -132,14 +132,24 @@ def render(wl, quotes, kind, now):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(); ap.add_argument("--watchlist", default=wlm.DEFAULT_PATH)
-    ap.add_argument("--kind", default="morning", choices=["morning", "close"]); ap.add_argument("--fixture")
-    ap.add_argument("--provider", default="auto"); ap.add_argument("--now")
+    ap = argparse.ArgumentParser(); ap.add_argument("--watchlist", default=None,
+                    help="watchlist path (default: $WATCHLIST_FILE or shared user/project location)")
+    ap.add_argument("--kind", default=None, choices=["morning", "close", "intraday"],
+                    help="brief kind (default: morning before the open, close after the bell, else intraday)")
+    ap.add_argument("--fixture")
+    ap.add_argument("--provider", default=os.environ.get("WATCHLIST_PROVIDER", "auto")); ap.add_argument("--now")
     ap.add_argument("--format", choices=["markdown", "json"], default="markdown")
     a = ap.parse_args(argv)
-    now = dt.datetime.fromisoformat(a.now) if a.now else dt.datetime.now(mc.ET)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=mc.ET)
+    if not a.watchlist:
+        a.watchlist = wlm.default_watchlist_path()
+    try:
+        now = mc.parse_iso(a.now) if a.now else dt.datetime.now(mc.ET)
+    except ValueError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if a.kind is None:
+        sess = mc.session(now)
+        a.kind = "morning" if sess == "pre" else "close" if sess in ("after", "closed") else "intraday"
     if not os.path.exists(a.watchlist):
         print(wlm.missing_watchlist_hint(a.watchlist), file=sys.stderr)
         return 2
@@ -147,7 +157,15 @@ def main(argv=None):
         mc.refresh_official_calendar(now.year)
     except Exception as e:
         print(f"WARN official NYSE overlay skipped: {e}", file=sys.stderr)
-    wl = wlm.load(a.watchlist); quotes = {}
+    try:
+        wl = wlm.load(a.watchlist)
+    except (ValueError, OSError, json.JSONDecodeError, ImportError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    if not wl.get("tickers"):
+        print("Watchlist is empty. Add one: python3 scripts/watchlist.py add NVDA")
+        return 0
+    quotes = {}
     for t in wl["tickers"]:
         try: quotes[t["symbol"]] = qt.get_quote(t["symbol"], a.provider, a.fixture)
         except Exception as e: quotes[t["symbol"]] = {"error": str(e)}

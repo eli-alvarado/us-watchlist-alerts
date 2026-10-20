@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **`quickstart.py` never writes `watchlist.json`.** The fixture demo reads the bundled example in place (temp state file). `--live` uses the user's real list and prints the `init` hint if it is missing.
+- **Stable watchlist location.** Default is `$WATCHLIST_FILE`, else `./watchlist.json` in a project directory, else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`). Shared by all three skills. Leftover in-skill `watchlist.json` is migrated. `npx skills add` reinstall can no longer delete the list. `schedule.py` (cron and Windows Task Scheduler) uses that data dir as the working directory, not the skill folder.
+- **Daily-event de-dupe keys on the session date of the data shown**, not the wall-clock calendar date. Pre-open / overnight last-close runs do not re-fire yesterday's alerts as "today." Messages say `on YYYY-MM-DD` when that date is not the calendar day.
+- **`WATCHLIST_PROVIDER` honored** by `alerts.py` / `brief.py` / `chart.py`. A total quote outage prints `ERROR no quotes (N/N failed)` and exits 3 instead of looking like "no new alerts". Empty watchlist prints an add hint. Unknown tickers raise a short `unknown symbol` message (Alpaca hint only for network/rate-limit failures).
+- **Friendly CLI errors:** `watchlist.py` / `chart.py` print one-line `error:` messages (no traceback); YAML-without-PyYAML cleans the `.tmp`; `update` of a missing ticker says "not on watchlist"; `save()` creates parent dirs. `schedule.py` merges keys into an existing `.env` and `shlex.quote`s values.
+- **`--now` accepts a trailing `Z`** on Python 3.10 and rejects garbage without a traceback. `market_calendar.py` / `indicators.py` / `bundle_skills.py --help` are safe (the bundler no longer runs on `--help`).
+- Skill SKILL.md files use GitHub URLs (or sibling paths) for README / LIMITATIONS / HEARTBEAT, which are not copied by `npx skills add`. `python3` throughout. SMA windows with too little history are omitted. `added`/`updated` use the ET date. `.quickstart_state.json` is gitignored. README says 26 alert types + 1 alias.
 - **`watchlist.py init` is empty by default.** A first `add NVDA` no longer hits "already on watchlist", and a first live alerts run no longer fires fixture-era levels like AAPL target $250. `init --example` copies the sample book and prints that it is sample data. `--empty` still works. `quickstart.py` still loads the sample for the fixture demo.
 - README: section on using the skills in ChatGPT, Grok Bot, or other chat agents.
 

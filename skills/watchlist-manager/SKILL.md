@@ -9,8 +9,13 @@ Maintains a single source-of-truth watchlist file that the `price-alerts` and `w
 Informational tool only. **Never place, modify, or cancel a trade.** Editing the watchlist is not trading.
 
 ## File location
-1. `$WATCHLIST_FILE` if set, else `./watchlist.json` in the working directory (YAML `watchlist.yaml` works if PyYAML is installed).
-2. If none exists, create it from `examples/watchlist.json` structure with an empty `tickers` list. Ask before overwriting an existing file.
+Shared with `price-alerts` and `watchlist-brief`. Survives `npx skills add` reinstall. Do **not** `cd` into this skill folder to run scripts (that folder is replaced on update). Run from the **project root** by path, e.g. `python3 .claude/skills/watchlist-manager/scripts/watchlist.py init`.
+
+1. `$WATCHLIST_FILE` if set.
+2. Else `./watchlist.json` in the current **project** directory (not inside a skill folder). YAML `watchlist.yaml` works if PyYAML is installed and you pass `--file`.
+3. Else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\watchlist.json`; or `$XDG_CONFIG_HOME/us-watchlist-alerts/`).
+4. A leftover `watchlist.json` inside a skill folder is copied to (3) on first run so reinstall cannot delete it.
+5. If none exists, `init` writes an empty valid list at that default path. Ask before overwriting an existing file.
 
 ## Schema (version 1)
 ```json
@@ -31,28 +36,28 @@ Informational tool only. **Never place, modify, or cancel a trade.** Editing the
   }]
 }
 ```
-Alert `type` values and their `value` meaning are documented in `skills/price-alerts/SKILL.md`.
+Alert `type` values and their `value` meaning are documented in `../price-alerts/SKILL.md` (sibling skill after install).
 A `stop` implies a `stop_hit` alert and `targets` imply `target_hit` automatically.
 
 ## Operations (prefer the script; it validates and writes atomically)
-`scripts/` ships next to this SKILL.md after `npx skills add`. Run from this skill folder, or from a git clone (root `scripts/` is the same files):
+`scripts/` ships next to this SKILL.md after `npx skills add`. Run from the project root by path (or from a git clone; root `scripts/` is the same files):
 ```bash
 python3 scripts/watchlist.py init
 python3 scripts/watchlist.py init --example
 python3 scripts/watchlist.py add NVDA --thesis "AI capex" --entry 160 --target 190 --target 220 --stop 140 --tag ai --tag semis --alert price_below:150
 python3 scripts/watchlist.py add NVDA --file swing.json --alert price_below:150
-python scripts/watchlist.py update NVDA --stop 145
-python scripts/watchlist.py update NVDA --tag megacap --alert rsi_above:75 --append
-python scripts/watchlist.py remove NVDA
-python scripts/watchlist.py list [--tag semis]
-python scripts/watchlist.py show NVDA
-python scripts/watchlist.py validate
+python3 scripts/watchlist.py update NVDA --stop 145
+python3 scripts/watchlist.py update NVDA --tag megacap --alert rsi_above:75 --append
+python3 scripts/watchlist.py remove NVDA
+python3 scripts/watchlist.py list [--tag semis]
+python3 scripts/watchlist.py show NVDA
+python3 scripts/watchlist.py validate
 ```
 If Python is unavailable, edit the JSON by hand following the schema and the validation rules below.
 
 ## Workflow
 1. **Resolve the ticker.** Uppercase it. If the user gives a company name, confirm the symbol (e.g. "Alphabet" -> GOOGL or GOOG?). Reject non-US listings or say they are unsupported by default data.
-2. **Sanity-check with a live quote**: `python scripts/quotes.py NVDA`. If the user's stop is above price for a long (or target below), point it out and ask.
+2. **Sanity-check with a live quote**: `python3 scripts/quotes.py NVDA`. If the user's stop is above price for a long (or target below), point it out and ask.
 3. **Capture the why.** If no thesis is given, ask once for a one-line reason; store `""` if they decline. Don't invent a thesis.
 4. **Suggest, don't impose, alerts.** Reasonable defaults to offer: stop/target levels, `earnings_within: 3`, `pct_move: 5` (last vs prior close). If they want a drop that trades through a % and then recovers, offer opt-in `intraday_low_pct` / `intraday_extreme_pct` and say those use session low/high, not last. Mention `iv_above`/`intraday_range_pct` only if they ask about vol or today's range — ATM IV is unofficial Yahoo, not IV rank. Only add what they agree to.
 5. **Write, validate, confirm.** Show the resulting entry (symbol, entry, stop, targets, alerts) in one compact line.
