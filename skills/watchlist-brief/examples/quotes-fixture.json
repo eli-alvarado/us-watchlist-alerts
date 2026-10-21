@@ -1,4 +1,5 @@
 {
+ "_default": "AAPL",
  "AAPL": {
   "price": 241.5,
   "prev_close": 237.33,

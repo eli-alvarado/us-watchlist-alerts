@@ -99,7 +99,7 @@ On a **single** question, a capable agent without the skill is fine — live pri
 | [`watchlist-brief`](skills/watchlist-brief/SKILL.md) | Morning or close summary: table, movers, distance to stop/target, upcoming earnings; optional `chart.py` (ASCII / PNG) |
 | [`HEARTBEAT.md`](HEARTBEAT.md) | Checklist for a scheduled check that stays silent unless something new happens |
 
-Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation + `init`), `brief.py`, `chart.py` (ASCII sparkline / grid; PNG when matplotlib is installed), `market_calendar.py`, `indicators.py`, `quickstart.py` (offline fixture demo after install), `schedule.py` (weekday cron / Task Scheduler for always-on checks).
+Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation + `init` / presets + Yahoo ticker check on `add`), `brief.py`, `chart.py` (ASCII sparkline / grid; PNG when matplotlib is installed), `market_calendar.py`, `indicators.py`, `quickstart.py` (offline fixture demo after install), `schedule.py` (weekday cron / Task Scheduler for always-on checks).
 
 ## Quick start
 
@@ -126,11 +126,17 @@ python3 .claude/skills/price-alerts/scripts/quotes.py AAPL
 
 ```bash
 python3 .claude/skills/watchlist-manager/scripts/watchlist.py init
-python3 .claude/skills/watchlist-manager/scripts/watchlist.py add AAPL --alert pct_change_down:3
+python3 .claude/skills/watchlist-manager/scripts/watchlist.py init --list-presets
+python3 .claude/skills/watchlist-manager/scripts/watchlist.py init --preset mega-cap-tech
+python3 .claude/skills/watchlist-manager/scripts/watchlist.py add AAPL --alert pct_change_down:3 --no-verify
 python3 .claude/skills/price-alerts/scripts/alerts.py
 ```
 
+`add` checks the symbol on the Yahoo chart (same default quote path). Unknown tickers are rejected with a short message. `--no-verify` (or `WATCHLIST_NO_VERIFY=1`) skips the lookup for offline / air-gapped use. If Yahoo is unreachable (timeout, DNS, connection reset, 5xx), the CLI prints a **WARN and adds the ticker anyway** so a network blip does not block you. `WATCHLIST_FIXTURE` / `--fixture` verifies against sample quotes instead of the network — presets work in that sample mode because the bundled fixture’s `_default` alias (AAPL’s quote) covers built-in preset symbols.
+
 `--file` can sit before or after the subcommand. If `alerts.py` has no watchlist file, it tells you to run `init` instead of printing a silent “no new alerts.”
+
+Built-in presets (`init --list-presets`): `mega-cap-tech` (AAPL/MSFT/GOOGL/AMZN/META/NVDA/TSLA), `index-etfs` (SPY/QQQ/DIA/IWM), `sector-etfs` (XLK/XLF/XLE/XLV/XLI/XLY/XLP/XLU/XLB/XLRE/XLC), `dividend-staples` (JNJ/PG/KO/PEP/WMT/MCD/XOM). Presets are symbol lists with a tag — no fixture-era price levels — so they are safe to use with `--fixture` / `quickstart.py` sample mode.
 
 Or clone the repo and use the same files at the root:
 
@@ -358,6 +364,8 @@ WATCHLIST_FILE=long.json  ALERT_STATE_FILE=.alert_state_long.json  python3 scrip
 |---|---|
 | `WATCHLIST_FILE` | Watchlist path. Default: `./watchlist.json` in a project directory (walks up from `.claude/skills/<name>` / `.agents/skills/<name>`), else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`; `$XDG_CONFIG_HOME/us-watchlist-alerts/` when set). Never the skill folder. |
 | `ALERT_STATE_FILE` | Cooldown state (default: `.alert_state.json` next to the watchlist) |
+| `WATCHLIST_FIXTURE` | Quote fixture path (same as `--fixture`). Offline / sample mode for `quotes.py`, `alerts.py`, `brief.py`, `chart.py`, and `watchlist.py add` verification. |
+| `WATCHLIST_NO_VERIFY` | Set to `1` to skip the Yahoo chart check on `watchlist.py add` (same as `--no-verify`) |
 | `WATCHLIST_PROVIDER` | `auto` (default), `alpaca`, `yfinance`, `yahoo`, `finnhub`, `alphavantage` |
 | `WATCHLIST_STALE_AFTER` | Seconds before a regular-session quote is flagged stale (default `900`; `0`=off) |
 | `WATCHLIST_HTTP_TIMEOUT` | HTTP timeout seconds (default `15`) |
@@ -379,7 +387,7 @@ Watchlist `settings`: `cooldown_minutes`, `rearm_pct`, `sessions` (`regular`/`pr
 
 For `provider=auto`, first success wins:
 
-1. `--fixture` (tests and the demo GIF)
+1. `--fixture` / `$WATCHLIST_FIXTURE` (tests and the demo GIF)
 2. **Alpaca** snapshot + daily bars if both API keys are set (official US feed; history included)
 3. **yfinance** if installed
 4. **Yahoo** public chart API (`query1`, then `query2`) — unofficial, stdlib, best-effort

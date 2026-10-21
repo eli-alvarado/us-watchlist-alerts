@@ -44,8 +44,11 @@ A `stop` implies a `stop_hit` alert and `targets` imply `target_hit` automatical
 ```bash
 python3 scripts/watchlist.py init
 python3 scripts/watchlist.py init --example
+python3 scripts/watchlist.py init --list-presets
+python3 scripts/watchlist.py init --preset mega-cap-tech
 python3 scripts/watchlist.py add NVDA --thesis "AI capex" --entry 160 --target 190 --target 220 --stop 140 --tag ai --tag semis --alert price_below:150
 python3 scripts/watchlist.py add NVDA --file swing.json --alert price_below:150
+python3 scripts/watchlist.py add NVDA --no-verify
 python3 scripts/watchlist.py update NVDA --stop 145
 python3 scripts/watchlist.py update NVDA --tag megacap --alert rsi_above:75 --append
 python3 scripts/watchlist.py remove NVDA
@@ -53,17 +56,20 @@ python3 scripts/watchlist.py list [--tag semis]
 python3 scripts/watchlist.py show NVDA
 python3 scripts/watchlist.py validate
 ```
+`add` looks the symbol up on the Yahoo chart (same default quote path as `quotes.py`). Unknown tickers are rejected (`NVDA is not a known US ticker…`). `--no-verify` / `WATCHLIST_NO_VERIFY=1` skips the lookup when you are offline. If the chart request fails because the network is down, the CLI prints a WARN and **adds the ticker anyway**. `--fixture` / `WATCHLIST_FIXTURE` checks the bundled sample quotes instead — presets work in that mode (the fixture `_default` alias covers built-in preset symbols that are not in the 3-name demo).
 If Python is unavailable, edit the JSON by hand following the schema and the validation rules below.
 
 ## Workflow
 1. **Resolve the ticker.** Uppercase it. If the user gives a company name, confirm the symbol (e.g. "Alphabet" -> GOOGL or GOOG?). Reject non-US listings or say they are unsupported by default data.
-2. **Sanity-check with a live quote**: `python3 scripts/quotes.py NVDA`. If the user's stop is above price for a long (or target below), point it out and ask.
+2. **Sanity-check with a live quote**: `add` already checks the symbol on the Yahoo chart (skip with `--no-verify`). Run `python3 scripts/quotes.py NVDA` when you want the price printed. If the user's stop is above price for a long (or target below), point it out and ask.
 3. **Capture the why.** If no thesis is given, ask once for a one-line reason; store `""` if they decline. Don't invent a thesis.
 4. **Suggest, don't impose, alerts.** Reasonable defaults to offer: stop/target levels, `earnings_within: 3`, `pct_move: 5` (last vs prior close). If they want a drop that trades through a % and then recovers, offer opt-in `intraday_low_pct` / `intraday_extreme_pct` and say those use session low/high, not last. Mention `iv_above`/`intraday_range_pct` only if they ask about vol or today's range — ATM IV is unofficial Yahoo, not IV rank. Only add what they agree to.
 5. **Write, validate, confirm.** Show the resulting entry (symbol, entry, stop, targets, alerts) in one compact line.
 
 ## Validation rules
 - Symbol matches `^[A-Z]{1,5}([.-][A-Z]{1,2})?$`; no duplicates.
+- `add` also checks the symbol on the Yahoo chart unless `--no-verify` is set. Reject unknown symbols. On network outage, warn and add anyway.
+- Built-in presets (`mega-cap-tech`, `index-etfs`, `sector-etfs`, `dividend-staples`) are valid symbol lists; `init --list-presets` prints them.
 - `entry`, `stop`, `targets[]` are numbers. For `side: long`, stop < entry; for `side: short`, stop > entry.
 - `settings.sessions` if present is a non-empty list of `regular` / `pre` / `after`.
 - `settings.extra_closures` if present is ISO dates (`YYYY-MM-DD`) for unscheduled full-day closures.

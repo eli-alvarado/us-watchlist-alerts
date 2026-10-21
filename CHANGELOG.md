@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Ticker check on `watchlist add`.** `add` looks the symbol up on the Yahoo chart (same default quote path). Unknown tickers are rejected with a short message. `--no-verify` / `WATCHLIST_NO_VERIFY=1` skips the check for offline use. A network/provider outage prints a WARN and **adds the ticker anyway**. `--fixture` / `WATCHLIST_FIXTURE` verifies against sample quotes instead of the network.
+- **Watchlist presets.** `watchlist.py init --list-presets` and `init --preset mega-cap-tech|index-etfs|sector-etfs|dividend-staples` seed a tagged symbol list (no fixture-era price levels). The bundled sample fixture’s `_default` alias (AAPL) covers preset symbols so sample/fixture mode still quotes them.
+- **First-run e2e tests.** `tests/test_first_run.py` runs every documented `python3 scripts/…` command from README and `SKILL.md` in a temp HOME (fixture data, no network), from several working directories, and fails if the docs mention a command or flag the CLI does not implement.
+
 - **Installed skill cwd uses the project watchlist.** If cwd is inside `.claude/skills/<name>` or `.agents/skills/<name>` (including `scripts/`), path resolution walks up to the project root and uses that `watchlist.json` — the same file as `cd` to the project. `watchlist.py init` / `add` / `list` print `using <path>`.
 - **`alerts.py` prints `error:` and exits 1** when the alert-state directory is not writable (no traceback). **`brief.py`** treats a total quote outage like `alerts.py` (`ERROR no quotes (N/N failed)`, exit 3). A watchlist whose root key is `watchlist` (or anything other than `tickers`) errors instead of looking empty.
 - **`quickstart.py` never writes `watchlist.json`.** The fixture demo reads the bundled example in place (temp state file). `--live` uses the user's real list and prints the `init` hint if it is missing.
@@ -12,7 +16,7 @@
 - **`--now` accepts a trailing `Z`** on Python 3.10 and rejects garbage without a traceback. `market_calendar.py` / `indicators.py` / `bundle_skills.py --help` are safe (the bundler no longer runs on `--help`).
 - Skill SKILL.md files use GitHub URLs (or sibling paths) for README / LIMITATIONS / HEARTBEAT, which are not copied by `npx skills add`. `python3` throughout. SMA windows with too little history are omitted. `added`/`updated` use the ET date. `.quickstart_state.json` is gitignored. README says 26 alert types + 1 alias.
 - **`watchlist.py init` is empty by default.** A first `add NVDA` no longer hits "already on watchlist", and a first live alerts run no longer fires fixture-era levels like AAPL target $250. `init --example` copies the sample book and prints that it is sample data. `--empty` still works. `quickstart.py` still loads the sample for the fixture demo.
-- README: section on using the skills in ChatGPT, Grok Bot, or other chat agents.
+- README: section on using the skills in ChatGPT, Grok Bot, or other chat agents. `WATCHLIST_FIXTURE` / `WATCHLIST_NO_VERIFY` env vars documented.
 
 ## 0.5.0 — 2026-10-16
 

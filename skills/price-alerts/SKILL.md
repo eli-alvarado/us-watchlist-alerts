@@ -18,6 +18,8 @@ Evaluates alert rules from the watchlist (see `watchlist-manager`) against fresh
 ```bash
 python3 scripts/watchlist.py init                                                         # empty watchlist if missing
 python3 scripts/watchlist.py init --example                                               # sample AAPL/TSLA/NVDA (fixture-era levels)
+python3 scripts/watchlist.py init --list-presets                                          # mega-cap-tech, index-etfs, sector-etfs, dividend-staples
+python3 scripts/watchlist.py init --preset index-etfs                                     # SPY/QQQ/DIA/IWM (works with --fixture / sample mode)
 python3 scripts/quickstart.py                                                             # offline fixture demo; does not write watchlist.json
 python3 scripts/alerts.py                                                                 # uses the shared watchlist + state paths
 python3 scripts/alerts.py --format json                                                    # machine-readable

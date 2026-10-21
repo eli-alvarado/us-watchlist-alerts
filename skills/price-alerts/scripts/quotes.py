@@ -2,7 +2,9 @@
 
 Fallback order for ``provider=auto`` (first success wins):
 
-1. ``--fixture`` / ``fixture=`` path, if given (tests and demos; not a live feed)
+1. ``--fixture`` / ``fixture=`` / ``$WATCHLIST_FIXTURE`` path, if given (tests and demos; not a live feed).
+   A ``_default`` entry (object, or alias like ``"AAPL"``) is reused for built-in
+   watchlist preset symbols so ``init --preset`` works in sample mode.
 2. Alpaca snapshot + daily bars, if ``ALPACA_API_KEY_ID`` + ``ALPACA_API_SECRET_KEY``
    (official US feed; history included when bars succeed)
 3. ``yfinance`` if the package is importable
@@ -231,13 +233,34 @@ def _finish(q):
     return q
 
 
+def resolve_fixture(path=None):
+    """Explicit ``--fixture`` wins; otherwise ``$WATCHLIST_FIXTURE`` (sample mode)."""
+    if path:
+        return path
+    return (os.environ.get("WATCHLIST_FIXTURE") or "").strip() or None
+
+
 def from_fixture(symbol, path):
     with open(path) as f:
         data = json.load(f)
     key = symbol.upper()
     if key not in data:
-        raise QuoteError("fixture", f"{key} not in fixture {path}")
-    q = dict(data[key]); q["symbol"] = key; q.setdefault("source", "fixture")
+        tmpl = data.get("_default")
+        if isinstance(tmpl, str):
+            tmpl = data.get(tmpl.upper()) or data.get(tmpl)
+        allowed = None
+        try:
+            import watchlist as _wlm
+            allowed = _wlm.preset_symbols()
+        except Exception:
+            allowed = None
+        if tmpl is None or (allowed is not None and key not in allowed):
+            raise QuoteError("fixture", f"{key} not in fixture {path}")
+        q = dict(tmpl)
+    else:
+        q = dict(data[key])
+    q["symbol"] = key
+    q.setdefault("source", "fixture")
     return _finish(q)
 
 
@@ -1082,6 +1105,7 @@ def _quote_failure(symbol, provider, errors):
 
 
 def get_quote(symbol, provider="auto", fixture=None, fetch_earnings=True):
+    fixture = resolve_fixture(fixture)
     if fixture:
         return from_fixture(symbol, fixture)
     errors = []
@@ -1121,6 +1145,7 @@ def main(argv=None):
     ap.add_argument("--iv", action="store_true",
                     help="attach unofficial Yahoo ATM implied vol (skipped on --fixture unless already present)")
     a = ap.parse_args(argv)
+    a.fixture = resolve_fixture(a.fixture)
     out = {}
     now = dt.datetime.now(dt.timezone.utc)
     for s in a.symbols:
