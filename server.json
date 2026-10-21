@@ -1,0 +1,11 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.eli-alvarado/us-watchlist-alerts",
+  "description": "US stock watchlist, NYSE-aware price alerts, briefs, movers, and gappers. No API key. Never places trades.",
+  "repository": {
+    "url": "https://github.com/eli-alvarado/us-watchlist-alerts",
+    "source": "github"
+  },
+  "version": "0.6.0",
+  "websiteUrl": "https://github.com/eli-alvarado/us-watchlist-alerts"
+}

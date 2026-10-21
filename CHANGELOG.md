@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Plugin 0.6.0 — stdio MCP server.** `scripts/mcp_server.py` is JSON-RPC over stdio (stdlib only, no API key). Tools: `get_quotes`, `watchlist_list` / `watchlist_add` / `watchlist_remove`, `run_alerts`, `morning_brief`, `market_status`, `movers`, `gappers`. Declared in `.claude-plugin/plugin.json` `mcpServers` with `${CLAUDE_PLUGIN_ROOT}`. Registry files: `smithery.yaml`, `server.json`. README has Claude Desktop / Cursor / Codex config snippets.
+- **`movers` / `gappers`.** `python3 scripts/movers.py` ranks the list by last vs prior close. `python3 scripts/gappers.py --threshold 2` lists open-vs-prior-close gaps (same default as `gap_up` / `gap_down`). Fixture-tested; honor `$WATCHLIST_FIXTURE`.
+- **README:** plugin install at the top (`/plugin marketplace add eli-alvarado/us-watchlist-alerts` then `/plugin install us-watchlist-alerts@us-watchlist-alerts`); **Try these prompts**; FAQ for API key, delay, never trades, runs-when-closed, ChatGPT/Grok Bot.
+- **CI:** `python3 scripts/validate_plugin.py` checks marketplace/plugin JSON against the official schema shape (Claude CLI is not required). Plugin version **0.6.0**.
+
 - **Ticker check on `watchlist add`.** `add` looks the symbol up on the Yahoo chart (same default quote path). Unknown tickers are rejected with a short message. `--no-verify` / `WATCHLIST_NO_VERIFY=1` skips the check for offline use. A network/provider outage prints a WARN and **adds the ticker anyway**. `--fixture` / `WATCHLIST_FIXTURE` verifies against sample quotes instead of the network.
 - **Watchlist presets.** `watchlist.py init --list-presets` and `init --preset mega-cap-tech|index-etfs|sector-etfs|dividend-staples` seed a tagged symbol list (no fixture-era price levels). The bundled sample fixture’s `_default` alias (AAPL) covers preset symbols so sample/fixture mode still quotes them.
 - **First-run e2e tests.** `tests/test_first_run.py` runs every documented `python3 scripts/…` command from README and `SKILL.md` in a temp HOME (fixture data, no network), from several working directories, and fails if the docs mention a command or flag the CLI does not implement.

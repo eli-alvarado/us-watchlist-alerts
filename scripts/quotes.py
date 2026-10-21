@@ -38,7 +38,7 @@ import argparse, datetime as dt, http.cookiejar, json, os, re, sys, time, urllib
 from zoneinfo import ZoneInfo
 
 UA = {
-    "User-Agent": "us-watchlist-alerts/0.5.0 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
+    "User-Agent": "us-watchlist-alerts/0.6.0 (+https://github.com/eli-alvarado/us-watchlist-alerts)"
 }
 # Yahoo crumb/cookie endpoints reject the project UA; chart still accepts it.
 YAHOO_BROWSER_UA = {

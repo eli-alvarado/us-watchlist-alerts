@@ -28,6 +28,7 @@ DOC_FILES = (
 SCRIPT_NAMES = (
     "watchlist.py", "alerts.py", "brief.py", "chart.py", "quotes.py",
     "schedule.py", "quickstart.py", "market_calendar.py",
+    "movers.py", "gappers.py",
 )
 IGNORE_DOC_FLAGS = {
     "all", "depth",  # npx / git
@@ -247,7 +248,7 @@ class FreshUser:
                 i = args.index("--file")
                 extra = ["--file", args[i + 1]]
             self.run_script("watchlist.py", ["add", sym, "--no-verify", *extra], cwd)
-        elif script in ("alerts.py", "brief.py"):
+        elif script in ("alerts.py", "brief.py", "movers.py", "gappers.py"):
             if any(a in ("--watchlist", "--file") or a.startswith("--watchlist=") for a in args):
                 return
             if cmd["env"].get("WATCHLIST_FILE"):
@@ -397,6 +398,10 @@ class FirstRunEmptyHome(unittest.TestCase):
                 self.assertEqual(r.returncode, 0, r.stderr)
                 r = user.run_script("market_calendar.py", [], cwd)
                 self.assertEqual(r.returncode, 0, r.stderr)
+                r = user.run_script("movers.py", ["--now", NOW], cwd)
+                self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+                r = user.run_script("gappers.py", ["--threshold", "2", "--now", NOW], cwd)
+                self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
                 r = user.run_script("quickstart.py", [], cwd)
                 self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
                 r = user.run_script("schedule.py", ["--dry-run"], cwd)

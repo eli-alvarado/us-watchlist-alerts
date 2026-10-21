@@ -1,0 +1,10 @@
+# Smithery registry config for the stdio MCP server.
+# https://smithery.ai/docs/build/configurations
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    additionalProperties: false
+    properties: {}
+  commandFunction: |-
+    (config) => ({ command: 'python3', args: ['scripts/mcp_server.py'] })

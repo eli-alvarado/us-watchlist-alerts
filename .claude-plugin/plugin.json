@@ -1,14 +1,22 @@
 {
   "name": "us-watchlist-alerts",
   "displayName": "US Watchlist & Price Alerts",
-  "version": "0.5.0",
-  "description": "US stock watchlist and NYSE-aware price alerts for Claude Code, Cursor, and Codex. No API key. Never places trades.",
+  "version": "0.6.0",
+  "description": "US stock watchlist, NYSE-aware price alerts, briefs, movers, and a stdio MCP server for Claude Code, Cursor, and Codex. No API key. Never places trades.",
   "author": {
     "name": "Eli Alvarado",
     "url": "https://github.com/eli-alvarado"
   },
   "homepage": "https://github.com/eli-alvarado/us-watchlist-alerts",
   "repository": "https://github.com/eli-alvarado/us-watchlist-alerts",
+  "documentationUrl": "https://github.com/eli-alvarado/us-watchlist-alerts#readme",
+  "supportUrl": "https://github.com/eli-alvarado/us-watchlist-alerts/issues",
   "license": "MIT",
-  "keywords": ["stocks", "watchlist", "alerts", "yahoo-finance", "nyse"]
+  "keywords": ["stocks", "watchlist", "alerts", "yahoo-finance", "nyse", "mcp"],
+  "mcpServers": {
+    "us-watchlist-alerts": {
+      "command": "python3",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/mcp_server.py"]
+    }
+  }
 }
