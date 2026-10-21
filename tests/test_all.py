@@ -190,7 +190,7 @@ class Watchlist(unittest.TestCase):
     def test_class_shares_symbol(self):
         self.assertTrue(wlm.SYMBOL_RE.match("BRK.B")); self.assertTrue(wlm.SYMBOL_RE.match("BF-B"))
     def test_cli(self):
-        self.assertEqual(wlm.main(["--file", self.p, "add", "AMD", "--entry", "150", "--stop", "130", "--tag", "semis"]), 0)
+        self.assertEqual(wlm.main(["--file", self.p, "add", "AMD", "--no-verify", "--entry", "150", "--stop", "130", "--tag", "semis"]), 0)
         self.assertEqual(wlm.main(["--file", self.p, "validate"]), 0)
         with mock.patch("sys.stderr"):
             self.assertEqual(wlm.main(["--file", self.p, "show", "NOPE"]), 1)
@@ -1082,7 +1082,7 @@ class WatchlistCli(unittest.TestCase):
     def test_file_flag_after_subcommand(self):
         d = tempfile.mkdtemp()
         path = os.path.join(d, "swing.json")
-        rc = wlm.main(["add", "MSFT", "--file", path, "--alert", "price_above:400"])
+        rc = wlm.main(["add", "MSFT", "--no-verify", "--file", path, "--alert", "price_above:400"])
         self.assertEqual(rc, 0)
         self.assertTrue(os.path.exists(path))
         self.assertEqual(wlm.load(path)["tickers"][0]["symbol"], "MSFT")
@@ -1100,7 +1100,7 @@ class WatchlistCli(unittest.TestCase):
         self.assertNotIn("SAMPLE DATA", out)
         with mock.patch("sys.stderr", io.StringIO()):
             self.assertEqual(wlm.main(["init", "--file", path]), 1)
-        rc = wlm.main(["add", "NVDA", "--file", path])
+        rc = wlm.main(["add", "NVDA", "--no-verify", "--file", path])
         self.assertEqual(rc, 0)
         self.assertEqual(wlm.load(path)["tickers"][0]["symbol"], "NVDA")
 
@@ -1128,7 +1128,7 @@ class WatchlistCli(unittest.TestCase):
             self.assertEqual(wlm.main(["init", "--example", "--file", path]), 1)
         buf2 = io.StringIO()
         with mock.patch("sys.stderr", buf2):
-            rc = wlm.main(["add", "NVDA", "--file", path])
+            rc = wlm.main(["add", "NVDA", "--no-verify", "--file", path])
         self.assertEqual(rc, 1)
         self.assertIn("already on watchlist", buf2.getvalue())
 
@@ -1139,6 +1139,109 @@ class WatchlistCli(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 wlm.main(["init", "--example", "--empty", "--file", path])
         self.assertFalse(os.path.exists(path))
+
+    def test_list_presets(self):
+        buf = io.StringIO()
+        with mock.patch("sys.stdout", buf):
+            rc = wlm.main(["init", "--list-presets"])
+        self.assertEqual(rc, 0)
+        out = buf.getvalue()
+        for name in ("mega-cap-tech", "index-etfs", "sector-etfs", "dividend-staples"):
+            self.assertIn(name, out)
+        self.assertIn("SPY", out)
+        self.assertIn("XLK", out)
+        self.assertIn("JNJ", out)
+
+    def test_init_preset_seeds_symbols_without_price_levels(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "watchlist.json")
+        buf = io.StringIO()
+        with mock.patch("sys.stdout", buf):
+            rc = wlm.main(["init", "--preset", "index-etfs", "--file", path])
+        self.assertEqual(rc, 0)
+        self.assertIn("preset index-etfs", buf.getvalue())
+        wl = wlm.load(path)
+        self.assertEqual([t["symbol"] for t in wl["tickers"]], ["SPY", "QQQ", "DIA", "IWM"])
+        for t in wl["tickers"]:
+            self.assertEqual(t.get("side"), "watch")
+            self.assertIn("index-etfs", t.get("tags") or [])
+            self.assertIsNone(t.get("entry"))
+            self.assertIsNone(t.get("stop"))
+            self.assertEqual(t.get("targets") or [], [])
+        with mock.patch("sys.stderr", io.StringIO()):
+            self.assertEqual(wlm.main(["init", "--preset", "index-etfs", "--file", path]), 1)
+
+    def test_init_all_presets_validate(self):
+        for name in wlm.PRESETS:
+            path = os.path.join(tempfile.mkdtemp(), "wl.json")
+            self.assertEqual(wlm.main(["init", "--preset", name, "--file", path]), 0, name)
+            self.assertEqual(wlm.validate(wlm.load(path)), [], name)
+
+    def test_init_preset_and_example_conflict(self):
+        path = os.path.join(tempfile.mkdtemp(), "watchlist.json")
+        with mock.patch("sys.stderr", io.StringIO()):
+            with self.assertRaises(SystemExit):
+                wlm.main(["init", "--preset", "mega-cap-tech", "--example", "--file", path])
+        self.assertFalse(os.path.exists(path))
+
+    def test_add_verifies_against_fixture(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        self.assertEqual(wlm.main(["init", "--file", path]), 0)
+        self.assertEqual(wlm.main(["add", "AAPL", "--file", path, "--fixture", FX]), 0)
+        self.assertEqual(wlm.load(path)["tickers"][0]["symbol"], "AAPL")
+        err = io.StringIO()
+        with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = wlm.main(["add", "ZZZZ", "--file", path, "--fixture", FX])
+        self.assertEqual(rc, 1)
+        self.assertIn("ZZZZ", err.getvalue())
+        self.assertIn("--no-verify", err.getvalue())
+        self.assertNotIn("ZZZZ", {t["symbol"] for t in wlm.load(path)["tickers"]})
+
+    def test_add_no_verify_skips_lookup(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        self.assertEqual(wlm.main(["add", "ZZZZ", "--no-verify", "--file", path]), 0)
+        self.assertEqual(wlm.load(path)["tickers"][0]["symbol"], "ZZZZ")
+
+    def test_add_unknown_yahoo_is_rejected(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        def yahoo_404(symbol, provider="yahoo", fixture=None, fetch_earnings=True):
+            raise qt.QuoteError("yahoo", f"{symbol}: unknown symbol (not found on yahoo)",
+                                status=404, bare=True)
+        err = io.StringIO()
+        with mock.patch.object(qt, "get_quote", side_effect=yahoo_404), \
+             mock.patch.dict(os.environ, {"WATCHLIST_NO_VERIFY": "", "WATCHLIST_FIXTURE": ""}, clear=False), \
+             mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            os.environ.pop("WATCHLIST_NO_VERIFY", None)
+            os.environ.pop("WATCHLIST_FIXTURE", None)
+            rc = wlm.main(["add", "ZZZZ", "--file", path])
+        self.assertEqual(rc, 1)
+        self.assertIn("not a known US ticker", err.getvalue())
+        self.assertFalse(os.path.exists(path))
+
+    def test_add_network_outage_warns_and_adds(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+        def timeout(symbol, provider="yahoo", fixture=None, fetch_earnings=True):
+            raise qt.QuoteError("yahoo", "timed out", hint="connection timed out")
+        err = io.StringIO()
+        with mock.patch.object(qt, "get_quote", side_effect=timeout), \
+             mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
+            rc = wlm.main(["add", "AAPL", "--file", path])
+        self.assertEqual(rc, 0)
+        self.assertIn("WARN", err.getvalue())
+        self.assertIn("Adding anyway", err.getvalue())
+        self.assertEqual(wlm.load(path)["tickers"][0]["symbol"], "AAPL")
+
+    def test_preset_quotes_from_sample_fixture_default(self):
+        fx = os.path.join(ROOT, "examples", "quotes-fixture.json")
+        q = qt.get_quote("SPY", fixture=fx)
+        self.assertEqual(q["symbol"], "SPY")
+        self.assertEqual(q["source"], "fixture")
+        with self.assertRaises(qt.QuoteError):
+            qt.from_fixture("ZZZZ", fx)
 
     def test_missing_watchlist_hint(self):
         msg = wlm.missing_watchlist_hint("nope.json")
@@ -1183,7 +1286,7 @@ class FreshInstallLayouts(unittest.TestCase):
         rc = wlm.main(["init", "--file", wl])
         self.assertEqual(rc, 0, rel)
         self.assertEqual(wlm.load(wl)["tickers"], [], rel)
-        rc = wlm.main(["add", "NVDA", "--file", wl])
+        rc = wlm.main(["add", "NVDA", "--no-verify", "--file", wl])
         self.assertEqual(rc, 0, rel)
         st = os.path.join(dest, ".state.json")
         rc = alerts.main(["--watchlist", wl, "--state", st, "--fixture", fx,
@@ -1470,7 +1573,7 @@ class WatchlistPaths(unittest.TestCase):
             err = io.StringIO()
             with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", err):
                 self.assertEqual(wlm.main(["init"]), 0)
-                self.assertEqual(wlm.main(["add", "NVDA"]), 0)
+                self.assertEqual(wlm.main(["add", "NVDA", "--no-verify"]), 0)
             proj_wl = os.path.join(proj, "watchlist.json")
             self.assertTrue(os.path.isfile(proj_wl), err.getvalue())
             self.assertIn("using " + os.path.abspath(proj_wl), err.getvalue())
@@ -1490,7 +1593,7 @@ class WatchlistPaths(unittest.TestCase):
         err = io.StringIO()
         with mock.patch("sys.stdout", io.StringIO()), mock.patch("sys.stderr", err):
             self.assertEqual(wlm.main(["init", "--file", path]), 0)
-            self.assertEqual(wlm.main(["add", "AMD", "--file", path]), 0)
+            self.assertEqual(wlm.main(["add", "AMD", "--no-verify", "--file", path]), 0)
             self.assertEqual(wlm.main(["list", "--file", path]), 0)
         text = err.getvalue()
         self.assertGreaterEqual(text.count("using " + os.path.abspath(path)), 3)
@@ -1506,8 +1609,8 @@ class Journeys(unittest.TestCase):
             self.assertEqual(wlm.main(["init"]), 0)
             wl = wlm.default_watchlist_path()
             self.assertEqual(os.path.abspath(wl), os.path.join(proj, "watchlist.json"))
-            self.assertEqual(wlm.main(["add", "AAPL", "--alert", "pct_change_down:3"]), 0)
-            self.assertEqual(wlm.main(["add", "NVDA", "--stop", "140"]), 0)
+            self.assertEqual(wlm.main(["add", "AAPL", "--no-verify", "--alert", "pct_change_down:3"]), 0)
+            self.assertEqual(wlm.main(["add", "NVDA", "--no-verify", "--stop", "140"]), 0)
             buf = io.StringIO()
             with mock.patch("sys.stdout", buf):
                 rc = alerts.main(["--watchlist", wl, "--state", os.path.join(proj, ".s.json"),
@@ -1534,7 +1637,7 @@ class Journeys(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(skill, ".quickstart_state.json")))
             err = io.StringIO()
             with mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
-                rc = wlm.main(["add", "AAPL", "--alert", "pct_change_down:3"])
+                rc = wlm.main(["add", "AAPL", "--no-verify", "--alert", "pct_change_down:3"])
             self.assertEqual(rc, 0, err.getvalue())
             wl = wlm.default_watchlist_path()
             self.assertEqual([t["symbol"] for t in wlm.load(wl)["tickers"]], ["AAPL"])
@@ -1551,7 +1654,7 @@ class Journeys(unittest.TestCase):
         skill = _copy_skill(proj)
         with IsolatedDataDir(chdir=skill) as iso:
             self.assertEqual(wlm.main(["init"]), 0)
-            self.assertEqual(wlm.main(["add", "AAPL"]), 0)
+            self.assertEqual(wlm.main(["add", "AAPL", "--no-verify"]), 0)
             saved = wlm.default_watchlist_path()
             self.assertTrue(saved.startswith(iso.xdg))
             shutil.rmtree(skill)
@@ -1571,7 +1674,7 @@ class Journeys(unittest.TestCase):
         brief_skill = _copy_skill(proj, "watchlist-brief")
         with IsolatedDataDir(chdir=manager) as iso:
             self.assertEqual(wlm.main(["init"]), 0)
-            self.assertEqual(wlm.main(["add", "NVDA", "--alert", "pct_change_down:3"]), 0)
+            self.assertEqual(wlm.main(["add", "NVDA", "--no-verify", "--alert", "pct_change_down:3"]), 0)
             shared = os.path.join(iso.xdg, "us-watchlist-alerts", "watchlist.json")
             self.assertEqual(os.path.abspath(wlm.default_watchlist_path()), os.path.abspath(shared))
             os.chdir(alerts_skill)
@@ -1660,11 +1763,11 @@ class CliUx(unittest.TestCase):
         path = os.path.join(d, "wl.json")
         self.assertEqual(wlm.main(["init", "--file", path]), 0)
         cases = [
-            (["add", "123", "--file", path], "bad symbol"),
-            (["add", "TOOLONGX", "--file", path], "bad symbol"),
-            (["add", "AMD", "--alert", "bogus_type:1", "--file", path], "unknown alert type"),
-            (["add", "AMD", "--alert", "price_below:abc", "--file", path], "must be a number"),
-            (["add", "AMD", "--stop", "200", "--entry", "100", "--file", path], "stop"),
+            (["add", "123", "--no-verify", "--file", path], "bad symbol"),
+            (["add", "TOOLONGX", "--no-verify", "--file", path], "bad symbol"),
+            (["add", "AMD", "--no-verify", "--alert", "bogus_type:1", "--file", path], "unknown alert type"),
+            (["add", "AMD", "--no-verify", "--alert", "price_below:abc", "--file", path], "must be a number"),
+            (["add", "AMD", "--no-verify", "--stop", "200", "--entry", "100", "--file", path], "stop"),
         ]
         for argv, needle in cases:
             err = io.StringIO()
@@ -1705,7 +1808,7 @@ class CliUx(unittest.TestCase):
         err = io.StringIO()
         with mock.patch("builtins.__import__", side_effect=fake), \
              mock.patch("sys.stderr", err), mock.patch("sys.stdout", io.StringIO()):
-            rc = wlm.main(["add", "AMD", "--file", path])
+            rc = wlm.main(["add", "AMD", "--no-verify", "--file", path])
         self.assertEqual(rc, 1)
         self.assertIn("pyyaml", err.getvalue().lower())
         self.assertFalse(os.path.exists(path + ".tmp"))
@@ -1714,7 +1817,7 @@ class CliUx(unittest.TestCase):
         d = tempfile.mkdtemp()
         path = os.path.join(d, "new", "sub", "x.json")
         with mock.patch("sys.stdout", io.StringIO()):
-            self.assertEqual(wlm.main(["add", "AMD", "--file", path]), 0)
+            self.assertEqual(wlm.main(["add", "AMD", "--no-verify", "--file", path]), 0)
         self.assertTrue(os.path.isfile(path))
 
     def test_chart_unknown_ticker_one_line(self):

@@ -314,6 +314,7 @@ def main(argv=None):
                     help="deliver new alerts (comma sinks: webhook,slack,ntfy,desktop,file). "
                          "Omit the value to use WATCHLIST_NOTIFY. Skipped on dry-run / empty / outside session.")
     a = ap.parse_args(argv)
+    a.fixture = qt.resolve_fixture(a.fixture)
     if not a.watchlist:
         a.watchlist = wlm.default_watchlist_path()
     if not a.state:

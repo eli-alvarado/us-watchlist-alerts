@@ -2,8 +2,11 @@
 
 python scripts/watchlist.py init
 python scripts/watchlist.py init --example
+python scripts/watchlist.py init --list-presets
+python scripts/watchlist.py init --preset mega-cap-tech
 python scripts/watchlist.py add NVDA --thesis "AI capex" --entry 120 \
     --target 150 --target 180 --stop 105 --tag ai --tag semis --alert "price_below:110"
+python scripts/watchlist.py add NVDA --no-verify
 python scripts/watchlist.py --file swing.json add NVDA --alert price_below:110
 python scripts/watchlist.py add NVDA --file swing.json --alert price_below:110
 python scripts/watchlist.py list [--tag ai]
@@ -11,6 +14,11 @@ python scripts/watchlist.py show NVDA
 python scripts/watchlist.py update NVDA --stop 110
 python scripts/watchlist.py remove NVDA
 python scripts/watchlist.py validate
+
+``add`` checks the symbol on the Yahoo chart (same default quote path) unless
+``--no-verify`` or ``WATCHLIST_NO_VERIFY`` is set. Unknown tickers are rejected.
+A network/provider outage prints a WARN and still adds the symbol. ``--fixture``
+/ ``WATCHLIST_FIXTURE`` verifies against sample quotes instead of the network.
 """
 from __future__ import annotations
 import argparse, datetime as dt, json, os, re, shutil, sys
@@ -28,6 +36,30 @@ SIDES = {"long", "short", "watch"}
 WATCHLIST_BASENAME = "watchlist.json"
 STATE_BASENAME = ".alert_state.json"
 APP_DIRNAME = "us-watchlist-alerts"
+
+# Built-in books for ``init --preset``. Symbol lists only (no fixture-era prices).
+PRESETS = {
+    "mega-cap-tech": {
+        "description": "Mega-cap US tech (Magnificent 7)",
+        "symbols": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA"],
+        "tags": ["mega-cap-tech"],
+    },
+    "index-etfs": {
+        "description": "Major US index ETFs",
+        "symbols": ["SPY", "QQQ", "DIA", "IWM"],
+        "tags": ["index-etfs"],
+    },
+    "sector-etfs": {
+        "description": "SPDR sector ETFs",
+        "symbols": ["XLK", "XLF", "XLE", "XLV", "XLI", "XLY", "XLP", "XLU", "XLB", "XLRE", "XLC"],
+        "tags": ["sector-etfs"],
+    },
+    "dividend-staples": {
+        "description": "Dividend staples",
+        "symbols": ["JNJ", "PG", "KO", "PEP", "WMT", "MCD", "XOM"],
+        "tags": ["dividend-staples"],
+    },
+}
 
 
 def _is_yaml(p): return p.endswith((".yaml", ".yml"))
@@ -231,6 +263,7 @@ def missing_watchlist_hint(path):
         f"No watchlist at {path}.",
         "Create one:  python3 scripts/watchlist.py init",
         "Sample data: python3 scripts/watchlist.py init --example",
+        "Presets:     python3 scripts/watchlist.py init --list-presets",
         "Defaults: $WATCHLIST_FILE, else ./watchlist.json in the project (also used when cwd is",
         "inside .claude/skills/<name> or .agents/skills/<name>),",
         f"else {os.path.join(user_data_dir(), WATCHLIST_BASENAME)} (shared, survives skill reinstall).",
@@ -240,13 +273,86 @@ def missing_watchlist_hint(path):
     return "\n".join(lines)
 
 
-def init_file(path=None, *, example=False, empty=False):
-    """Write an empty valid watchlist, or copy the bundled sample if ``example``.
+def preset_symbols():
+    """Uppercase symbols from every built-in preset (used by fixture sample mode)."""
+    out = set()
+    for spec in PRESETS.values():
+        out.update(s.upper() for s in spec["symbols"])
+    return out
+
+
+def list_presets_text():
+    lines = []
+    for name, spec in PRESETS.items():
+        lines.append(f"{name:20} {spec['description']}")
+        lines.append(f"{'':20} {', '.join(spec['symbols'])}")
+    return "\n".join(lines)
+
+
+def _env_truthy(name):
+    return (os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def classify_verify_error(exc):
+    """``unknown`` (reject) vs ``network`` (warn, add anyway)."""
+    status = getattr(exc, "status", None)
+    text = str(exc).lower()
+    if "not in fixture" in text:
+        return "unknown"
+    if status == 404:
+        return "unknown"
+    try:
+        import quotes as qt
+        if qt._looks_unknown_symbol([exc]):
+            return "unknown"
+    except Exception:
+        pass
+    return "network"
+
+
+def verify_symbol(symbol, fixture=None):
+    """Check ``symbol`` on the Yahoo chart, or against a quote fixture.
+
+    Returns ``("ok", None)``, ``("unknown", message)``, or ``("network", message)``.
+
+    Network / provider outages are *not* fatal: the CLI warns and adds anyway so a
+    blip does not block ``watchlist add``. Unknown symbols are rejected. Pass
+    ``--no-verify`` (or ``WATCHLIST_NO_VERIFY=1``) to skip this check when offline.
+    ``--fixture`` / ``WATCHLIST_FIXTURE`` uses sample quotes instead of the network.
+    """
+    symbol = (symbol or "").upper()
+    fixture = (fixture or os.environ.get("WATCHLIST_FIXTURE") or "").strip() or None
+    import quotes as qt
+    try:
+        qt.get_quote(symbol, provider="yahoo", fixture=fixture, fetch_earnings=False)
+        return "ok", None
+    except Exception as e:
+        if classify_verify_error(e) == "unknown":
+            if fixture:
+                return "unknown", (
+                    f"{symbol} is not in the quote fixture ({fixture}). "
+                    "Use a listed sample ticker, or pass --no-verify."
+                )
+            return "unknown", (
+                f"{symbol} is not a known US ticker on Yahoo Finance. "
+                "Check the symbol, or pass --no-verify to add it anyway."
+            )
+        err = str(e).strip() or e.__class__.__name__
+        return "network", (
+            f"could not verify {symbol} ({err}). Adding anyway. "
+            "Pass --no-verify to skip this check when offline."
+        )
+
+
+def init_file(path=None, *, example=False, empty=False, preset=None):
+    """Write an empty valid watchlist, copy the sample, or seed a built-in preset.
 
     ``empty`` is accepted for compatibility; empty is already the default.
+    Presets are symbol lists with a tag (no fixture-era price levels).
     """
-    if example and empty:
-        raise ValueError("pass only one of --example or --empty")
+    chosen = [n for n, v in (("example", example), ("empty", empty), ("preset", preset)) if v]
+    if len(chosen) > 1:
+        raise ValueError("pass only one of --example, --empty, or --preset")
     if path is None:
         path = default_watchlist_path()
     if os.path.exists(path):
@@ -260,6 +366,16 @@ def init_file(path=None, *, example=False, empty=False):
             raise FileNotFoundError("bundled example watchlist not found")
         shutil.copy2(src, path)
         return path, "copied-example"
+    if preset:
+        spec = PRESETS.get(preset)
+        if not spec:
+            names = ", ".join(PRESETS)
+            raise ValueError(f"unknown preset {preset!r}. Use --list-presets ({names})")
+        wl = {"version": SCHEMA_VERSION, "settings": {}, "tickers": []}
+        for sym in spec["symbols"]:
+            add(wl, sym, tags=list(spec["tags"]), side="watch")
+        save(wl, path)
+        return path, f"preset:{preset}"
     save({"version": SCHEMA_VERSION, "settings": {}, "tickers": []}, path)
     return path, "empty"
 
@@ -466,6 +582,13 @@ def main(argv=None):
         p.add_argument("--side", choices=["long", "short", "watch"])
         p.add_argument("--notes")
         if name == "update": p.add_argument("--append", action="store_true", help="append tags/alerts/targets")
+        if name == "add":
+            p.add_argument("--no-verify", action="store_true",
+                           help="skip Yahoo chart lookup (offline / air-gapped). "
+                                "Also set by WATCHLIST_NO_VERIFY=1")
+            p.add_argument("--fixture", default=None,
+                           help="verify the symbol against a quote fixture instead of the network "
+                                "(default: $WATCHLIST_FIXTURE)")
     p = sp.add_parser("remove"); p.add_argument("symbol")
     p = sp.add_parser("show"); p.add_argument("symbol")
     p = sp.add_parser("list"); p.add_argument("--tag")
@@ -476,20 +599,30 @@ def main(argv=None):
                         help="copy the bundled sample watchlist (AAPL/TSLA/NVDA fixture-era levels; not a live book)")
     g_init.add_argument("--empty", action="store_true",
                         help="write an empty valid watchlist (default; kept for compatibility)")
+    g_init.add_argument("--preset", choices=sorted(PRESETS),
+                        help="seed a built-in symbol list (no live price levels; works with --fixture / sample mode)")
+    g_init.add_argument("--list-presets", action="store_true",
+                        help="print built-in presets and exit without writing a file")
     a = ap.parse_args(rest)
     if file_override:
         a.file = file_override
+    if a.cmd == "init" and getattr(a, "list_presets", False):
+        print(list_presets_text())
+        return 0
     if not a.file:
         a.file = default_watchlist_path()
     if a.cmd == "init":
         try:
-            path, how = init_file(a.file, example=a.example, empty=a.empty)
+            path, how = init_file(a.file, example=a.example, empty=a.empty, preset=a.preset)
         except (FileExistsError, FileNotFoundError, ValueError) as e:
             print(e, file=sys.stderr); return 1
         if how == "copied-example":
             print(f"wrote {path} (sample data)")
             print("SAMPLE DATA: AAPL, TSLA, NVDA with fixture-era price levels "
                   "(e.g. AAPL target $250). Not a live book — demos only.")
+        elif how.startswith("preset:"):
+            name = how.split(":", 1)[1]
+            print(f"wrote {path} (preset {name}: {', '.join(PRESETS[name]['symbols'])})")
         else:
             print(f"wrote {path} (empty)")
         note_using(path)
@@ -499,7 +632,17 @@ def main(argv=None):
         if a.cmd in ("add", "update"):
             kw = {k: getattr(a, k) for k in ("thesis", "entry", "stop", "targets", "tags", "side", "notes")}
             kw["alerts"] = [parse_alert(x) for x in (a.alerts or [])]
-            if a.cmd == "update": kw["append"] = a.append
+            if a.cmd == "update":
+                kw["append"] = a.append
+            elif a.cmd == "add":
+                skip = a.no_verify or _env_truthy("WATCHLIST_NO_VERIFY")
+                if not skip:
+                    status, msg = verify_symbol(a.symbol, fixture=a.fixture)
+                    if status == "unknown":
+                        print(f"error: {msg}", file=sys.stderr)
+                        return 1
+                    if status == "network":
+                        print(f"WARN {msg}", file=sys.stderr)
             t = (add if a.cmd == "add" else update)(wl, a.symbol, **kw)
             save(wl, a.file)
             note_using(a.file)
