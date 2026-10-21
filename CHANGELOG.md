@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **MCP stdio framing.** `scripts/mcp_server.py` writes compact newline-delimited JSON (one JSON-RPC message per line), matching the MCP stdio spec. It no longer replies with LSP-style `Content-Length` headers. Reads still accept header-framed requests from older clients. Stdout is protocol-only; prints go to stderr.
 - **Plugin 0.6.0 — stdio MCP server.** `scripts/mcp_server.py` is JSON-RPC over stdio (stdlib only, no API key). Tools: `get_quotes`, `watchlist_list` / `watchlist_add` / `watchlist_remove`, `run_alerts`, `morning_brief`, `market_status`, `movers`, `gappers`. Declared in `.claude-plugin/plugin.json` `mcpServers` with `${CLAUDE_PLUGIN_ROOT}`. Registry files: `smithery.yaml`, `server.json`. README has Claude Desktop / Cursor / Codex config snippets.
 - **`movers` / `gappers`.** `python3 scripts/movers.py` ranks the list by last vs prior close. `python3 scripts/gappers.py --threshold 2` lists open-vs-prior-close gaps (same default as `gap_up` / `gap_down`). Fixture-tested; honor `$WATCHLIST_FIXTURE`.
 - **README:** plugin install at the top (`/plugin marketplace add eli-alvarado/us-watchlist-alerts` then `/plugin install us-watchlist-alerts@us-watchlist-alerts`); **Try these prompts**; FAQ for API key, delay, never trades, runs-when-closed, ChatGPT/Grok Bot.

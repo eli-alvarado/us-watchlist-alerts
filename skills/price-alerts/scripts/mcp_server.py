@@ -3,8 +3,10 @@
 Exposes watchlist, quotes, alerts, brief, NYSE status, movers, and gappers.
 No API key. Never places trades. Skill remains the primary interface.
 
-Framing: official MCP ``Content-Length`` headers, plus newline-delimited JSON
-so tests and simple clients can speak either dialect.
+Framing: MCP stdio is newline-delimited JSON (one JSON-RPC message per line,
+no headers). Replies are compact JSON plus a trailing newline. Reads still
+accept Content-Length framing from older clients. Protocol goes to stdout;
+logs and stray prints go to stderr.
 """
 from __future__ import annotations
 import datetime as dt, io, json, os, sys
@@ -405,10 +407,9 @@ def handle(msg):
 
 
 def write_message(msg, out):
-    body = json.dumps(msg, ensure_ascii=False).encode()
-    header = f"Content-Length: {len(body)}\r\n\r\n".encode()
-    out.write(header)
-    out.write(body)
+    """Write one JSON-RPC message as a single compact JSON line."""
+    line = json.dumps(msg, ensure_ascii=False, separators=(",", ":")).encode()
+    out.write(line + b"\n")
     out.flush()
 
 
@@ -443,18 +444,25 @@ def read_message(inp):
 def serve(inp=None, out=None):
     inp = inp or sys.stdin.buffer
     out = out or sys.stdout.buffer
-    while True:
-        msg = read_message(inp)
-        if msg is None:
-            break
-        if msg.get("error") and "method" not in msg and "result" not in msg:
-            write_message(msg if "jsonrpc" in msg else _err(None, -32700, "parse error"), out)
-            continue
-        resp = handle(msg)
-        if resp is not None:
-            write_message(resp, out)
-        if msg.get("method") == "shutdown":
-            break
+    # Keep stdout for protocol only. Tool code that print()s would otherwise
+    # interleave with JSON-RPC replies and break MCP clients.
+    saved_stdout = sys.stdout
+    sys.stdout = sys.stderr
+    try:
+        while True:
+            msg = read_message(inp)
+            if msg is None:
+                break
+            if msg.get("error") and "method" not in msg and "result" not in msg:
+                write_message(msg if "jsonrpc" in msg else _err(None, -32700, "parse error"), out)
+                continue
+            resp = handle(msg)
+            if resp is not None:
+                write_message(resp, out)
+            if msg.get("method") == "shutdown":
+                break
+    finally:
+        sys.stdout = saved_stdout
 
 
 def main(argv=None):

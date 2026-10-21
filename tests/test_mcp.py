@@ -99,6 +99,68 @@ class McpProtocol(unittest.TestCase):
         self.assertTrue(err)
         self.assertIn("unknown tool", text)
 
+    def _assert_ndjson_replies(self, raw):
+        """Every stdout byte must be one compact JSON-RPC line; no headers."""
+        self.assertFalse(raw.startswith(b"Content-Length"), raw[:80])
+        self.assertNotIn(b"Content-Length:", raw)
+        self.assertTrue(raw.endswith(b"\n"), raw[-40:])
+        lines = raw.split(b"\n")
+        self.assertEqual(lines[-1], b"", "stdout must end with a trailing newline")
+        bodies = []
+        for line in lines[:-1]:
+            self.assertTrue(line, "empty line on stdout")
+            self.assertFalse(line.lower().startswith(b"content-length:"), line)
+            self.assertNotIn(b"\r", line)
+            msg = json.loads(line)
+            self.assertIsInstance(msg, dict)
+            self.assertEqual(msg.get("jsonrpc"), "2.0")
+            self.assertEqual(line, json.dumps(msg, ensure_ascii=False, separators=(",", ":")).encode())
+            bodies.append(msg)
+        return bodies
+
+    def test_write_message_is_one_compact_json_line(self):
+        buf = io.BytesIO()
+        mcp.write_message({"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}, buf)
+        raw = buf.getvalue()
+        self.assertEqual(raw, b'{"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n')
+        self.assertNotIn(b"Content-Length", raw)
+
+    def test_read_message_still_accepts_content_length(self):
+        body = b'{"jsonrpc":"2.0","id":9,"method":"ping"}'
+        framed = b"Content-Length: %d\r\n\r\n" % len(body) + body
+        msg = mcp.read_message(io.BytesIO(framed))
+        self.assertEqual(msg["method"], "ping")
+        self.assertEqual(msg["id"], 9)
+
+    def test_serve_reads_headers_writes_ndjson(self):
+        body = b'{"jsonrpc":"2.0","id":1,"method":"ping"}'
+        framed = b"Content-Length: %d\r\n\r\n" % len(body) + body
+        out = io.BytesIO()
+        mcp.serve(io.BytesIO(framed), out)
+        self.assertEqual(out.getvalue(), b'{"jsonrpc":"2.0","id":1,"result":{}}\n')
+
+    def test_serve_prints_go_to_stderr(self):
+        orig = mcp.handle
+
+        def noisy(msg):
+            print("debug from tool")
+            return orig(msg)
+
+        inp = io.BytesIO(b'{"jsonrpc":"2.0","id":1,"method":"ping"}\n')
+        out = io.BytesIO()
+        err = io.StringIO()
+        saved_err = sys.stderr
+        mcp.handle = noisy
+        try:
+            sys.stderr = err
+            mcp.serve(inp, out)
+        finally:
+            mcp.handle = orig
+            sys.stderr = saved_err
+        self.assertNotIn(b"debug from tool", out.getvalue())
+        self.assertIn("debug from tool", err.getvalue())
+        self.assertEqual(json.loads(out.getvalue()), {"jsonrpc": "2.0", "id": 1, "result": {}})
+
     def test_stdio_roundtrip(self):
         reqs = [
             {"jsonrpc": "2.0", "id": 1, "method": "initialize",
@@ -107,38 +169,29 @@ class McpProtocol(unittest.TestCase):
             {"jsonrpc": "2.0", "method": "notifications/initialized"},
             {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
             {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-             "params": {"name": "market_status", "arguments": {"when": "2026-10-15T10:00:00-04:00"}}},
-            {"jsonrpc": "2.0", "id": 4, "method": "shutdown"},
+             "params": {"name": "market_status",
+                        "arguments": {"when": "2026-10-15T10:00:00-04:00"}}},
+            {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
+             "params": {"name": "get_quotes",
+                        "arguments": {"symbols": ["AAPL"], "fixture": FX}}},
+            {"jsonrpc": "2.0", "id": 5, "method": "shutdown"},
         ]
-        raw = "".join(json.dumps(r) + "\n" for r in reqs)
+        raw_in = "".join(json.dumps(r) + "\n" for r in reqs)
         proc = subprocess.run(
-            [sys.executable, os.path.join(ROOT, "scripts", "mcp_server.py")],
-            input=raw.encode(), cwd=ROOT, capture_output=True, timeout=15,
+            [sys.executable, "-u", os.path.join(ROOT, "scripts", "mcp_server.py")],
+            input=raw_in.encode(), cwd=ROOT, capture_output=True, timeout=15,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr.decode())
-        bodies = []
-        data = proc.stdout
-        i = 0
-        while i < len(data):
-            if data[i:i + 15].lower().startswith(b"content-length:"):
-                nl = data.find(b"\r\n\r\n", i)
-                header = data[i:nl]
-                length = int(header.split(b":", 1)[1])
-                start = nl + 4
-                bodies.append(json.loads(data[start:start + length]))
-                i = start + length
-                continue
-            i += 1
+        bodies = self._assert_ndjson_replies(proc.stdout)
         ids = [b.get("id") for b in bodies]
-        self.assertIn(1, ids)
-        self.assertIn(2, ids)
-        self.assertIn(3, ids)
-        listed = next(b for b in bodies if b.get("id") == 2)
-        names = {t["name"] for t in listed["result"]["tools"]}
+        self.assertEqual(ids, [1, 2, 3, 4, 5])
+        self.assertEqual(bodies[0]["result"]["serverInfo"]["name"], "us-watchlist-alerts")
+        names = {t["name"] for t in bodies[1]["result"]["tools"]}
         self.assertIn("get_quotes", names)
-        status = next(b for b in bodies if b.get("id") == 3)
-        payload = json.loads(status["result"]["content"][0]["text"])
-        self.assertEqual(payload["session"], "regular")
+        status = json.loads(bodies[2]["result"]["content"][0]["text"])
+        self.assertEqual(status["session"], "regular")
+        quote = json.loads(bodies[3]["result"]["content"][0]["text"])
+        self.assertAlmostEqual(quote["AAPL"]["price"], 241.5)
 
 
 if __name__ == "__main__":
