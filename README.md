@@ -348,6 +348,8 @@ Load the three `SKILL.md` files as instructions, give the agent shell access to 
 
 Optional. The skill is still the primary interface. `scripts/mcp_server.py` is a **stdlib** JSON-RPC server over stdio (no pip packages, no API key). Tools: `get_quotes`, `watchlist_list` / `watchlist_add` / `watchlist_remove`, `run_alerts`, `morning_brief`, `market_status`, `movers`, `gappers`. Claude Code plugin users get it automatically via `mcpServers` in `.claude-plugin/plugin.json`.
 
+The stdio transport is **newline-delimited JSON**: one compact JSON-RPC message per line, no `Content-Length` headers. Replies go to stdout; logs go to stderr. Claude Desktop, Cursor, and Codex speak that dialect — the snippets below are enough (no extra framing flags).
+
 Claude Desktop (`claude_desktop_config.json`) and Cursor (`.cursor/mcp.json` or Settings → MCP):
 
 ```json

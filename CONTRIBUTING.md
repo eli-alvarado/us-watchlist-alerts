@@ -23,7 +23,7 @@ Scripts use the Python 3.10+ standard library. Optional extras in `requirements.
 | Schema | `scripts/watchlist.py` `validate`, `examples/` | Validation tests |
 | Chart | `scripts/chart.py` | Fixture ASCII / levels; PNG only if matplotlib is present |
 | Movers / gappers | `scripts/screener.py`, `movers.py`, `gappers.py` | Fixture rank + `--threshold` in `tests/test_screener.py` |
-| MCP server | `scripts/mcp_server.py` | `tests/test_mcp.py` (handshake + fixture tools; no network) |
+| MCP server | `scripts/mcp_server.py` | `tests/test_mcp.py` (handshake + fixture tools + NDJSON stdio subprocess; no network) |
 | Plugin JSON | `.claude-plugin/plugin.json`, `marketplace.json` | `python3 scripts/validate_plugin.py` |
 | Agent instructions | `skills/*/SKILL.md`, `HEARTBEAT.md` | Read them as the agent would; keep "no trades" language |
 
