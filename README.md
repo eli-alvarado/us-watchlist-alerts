@@ -4,7 +4,7 @@
 
 **Featured in:** [awesome-gemini-cli](https://github.com/Piebald-AI/awesome-gemini-cli)
 
-Free, open-source **agent skills** (`SKILL.md` format) for a **US stock watchlist**, **stock price alerts**, a **daily market brief**, and **price charts**, with alerts that know **NYSE market hours and holidays**. Works in Claude Code, Codex, Gemini CLI, Cursor, and any agent that reads `SKILL.md`. Track tickers with a thesis, entry, targets, and stop. Get de-duplicated alerts on price levels, daily % moves, gaps, 52-week highs and lows, moving-average crosses, RSI, ATM IV, volume spikes, intraday range, and earnings, then a morning or close brief. **No API key and no MCP required.** Default path is Python 3 stdlib + the unofficial Yahoo Finance chart. Optional: `yfinance`, Alpaca, Finnhub, Alpha Vantage.
+Free, open-source **agent skills** (`SKILL.md` format) for a **US stock watchlist**, **stock price alerts**, a **daily market brief**, **movers / gappers**, and **price charts**, with alerts that know **NYSE market hours and holidays**. Works in Claude Code, Codex, Gemini CLI, Cursor, and any agent that reads `SKILL.md`. An optional **stdio MCP server** is included (no extra packages). Track tickers with a thesis, entry, targets, and stop. Get de-duplicated alerts on price levels, daily % moves, gaps, 52-week highs and lows, moving-average crosses, RSI, ATM IV, volume spikes, intraday range, and earnings, then a morning or close brief. **No API key.** Default path is Python 3 stdlib + the unofficial Yahoo Finance chart. Optional: `yfinance`, Alpaca, Finnhub, Alpha Vantage.
 
 > **Not financial advice.** These skills **never place, modify, or cancel a trade**. Free quotes may be delayed ~15 minutes. Use at your own risk.
 
@@ -13,6 +13,56 @@ Free, open-source **agent skills** (`SKILL.md` format) for a **US stock watchlis
 About 15 seconds, **fixture / replayed** sample quotes (not a live feed). Same story as `python3 scripts/quickstart.py` after install.
 
 Longer after-hours fixture walkthrough: [docs/demo.gif](docs/demo.gif).
+
+## Install
+
+### Claude Code plugin
+
+This repo is a Claude Code marketplace (skills + a stdio MCP server):
+
+```text
+/plugin marketplace add eli-alvarado/us-watchlist-alerts
+/plugin install us-watchlist-alerts@us-watchlist-alerts
+```
+
+Then ask in Claude Code the way you would talk to a coworker. Other agents: [Quick start](#quick-start) (`npx skills add`). MCP-only clients: [MCP server](#mcp-server).
+
+## Try these prompts
+
+Copy-paste after install. Informational only — it never places a trade.
+
+- Add NVDA with a stop at 110 and alert me on a 5% drop
+- What's on my watchlist?
+- Give me my morning brief
+- Any new alerts?
+- What moved on my list today?
+- Which names gapped more than 2% vs yesterday's close?
+- Is the NYSE open right now?
+- Chart AAPL with my stop and targets
+- Watch TSLA and tell me if it drops below 200
+- Set up phone alerts even when the agent is closed
+
+## FAQ
+
+**Do I need an API key?** No. The default path is Python 3 stdlib + the unofficial Yahoo Finance chart. Optional Alpaca / Finnhub / Alpha Vantage keys are only if you want those feeds.
+
+**Is the data delayed?** Free quotes may be delayed ~15 minutes. Say so when precision matters. US-listed stocks and ETFs only.
+
+**Will it trade?** Never. There is no broker submit path. Every `SKILL.md` and [SECURITY.md](SECURITY.md) say the agent must never place, modify, or cancel an order without your explicit confirmation of that specific order.
+
+**Does it run when my agent is closed?** A Claude/Cursor session does not. For always-on weekday checks, `python3 scripts/schedule.py` installs cron (or prints a Task Scheduler line) plus a notify sink such as ntfy. See [Get alerts on your phone](#get-alerts-on-your-phone-even-with-your-agent-closed).
+
+**Does it work in ChatGPT or Grok Bot?** Grok Bot works today (live Yahoo, no API key). ChatGPT can load this `SKILL.md` format on Business / Enterprise / Edu; we have not tested it there, and its sandbox may block live lookups (the bundled fixture still works offline).
+
+**What does it cost?** Free.
+
+**Where does my data go?** `$WATCHLIST_FILE` if set, else `./watchlist.json` in your **project** directory (the same file if you `cd` into `.claude/skills/<name>` or `.agents/skills/<name>` — the scripts walk up to the project root), else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`). Alert state defaults to `.alert_state.json` next to that file. `watchlist.py init` / `add` / `list` print `using <path>`. That location is shared by all three skills and is **not** inside the skill folder, so `npx skills add` cannot delete it. See [SECURITY.md](SECURITY.md).
+
+**Why did I get fewer alerts with the skill?** That is the point. Same distinct events, no duplicate pings — see [With vs. without](#with-vs-without-the-skill).
+
+**Claude Code install landed in `.agents/skills`?** You used bare `-y`. Use `-a claude-code` so it writes `.claude/skills/`. Or use the plugin commands above.
+
+**Windows: `ZoneInfoNotFoundError`?** `pip install tzdata`. Linux CI does not need it.
 
 ## How it works
 
@@ -44,22 +94,6 @@ That installs a **weekday** cron job (every 5 minutes, Mon–Fri) whose working 
 No always-on computer? In a **private fork**, copy [`examples/alerts-cron.yml`](examples/alerts-cron.yml) to `.github/workflows/alerts.yml` and set `NTFY_TOPIC` (or Slack/webhook) as Actions secrets. Do **not** put notify secrets on this public repo — [`.github/workflows/live.yml`](.github/workflows/live.yml) is a no-secrets public snapshot, not your phone.
 
 Never places trades.
-
-## FAQ
-
-**What does it cost?** Free. No API key for the default Yahoo chart path. Optional Alpaca / Finnhub / Alpha Vantage keys are only if you want those feeds.
-
-**Does it place trades?** No. Every `SKILL.md` and [SECURITY.md](SECURITY.md) say the agent must never place, modify, or cancel an order without your explicit confirmation of that specific order. There is no broker submit path in this repo.
-
-**Where does my data go?** `$WATCHLIST_FILE` if set, else `./watchlist.json` in your **project** directory (the same file if you `cd` into `.claude/skills/<name>` or `.agents/skills/<name>` — the scripts walk up to the project root), else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`). Alert state defaults to `.alert_state.json` next to that file. `watchlist.py init` / `add` / `list` print `using <path>` so you can see which file was chosen. That location is shared by all three skills and is **not** inside the skill folder, so `npx skills add` (reinstall/update) cannot delete it. Outbound HTTPS is quotes and (if you enable them) notify sinks. Keys belong in the environment, never in the watchlist file. See [SECURITY.md](SECURITY.md).
-
-**What data sources?** Default: unofficial Yahoo Finance chart (stdlib). Fallback order and earnings/IV layers: [docs/LIMITATIONS.md](docs/LIMITATIONS.md). Quotes may be delayed ~15 minutes. US-listed stocks and ETFs only.
-
-**Why did I get fewer alerts with the skill?** That is the point. Same distinct events, no duplicate pings — see [With vs. without](#with-vs-without-the-skill).
-
-**Claude Code install landed in `.agents/skills`?** You used bare `-y`. Use `-a claude-code` so it writes `.claude/skills/`. See [Quick start](#quick-start).
-
-**Windows: `ZoneInfoNotFoundError`?** `pip install tzdata`. Linux CI does not need it.
 
 ## With vs. without the skill
 
@@ -99,7 +133,7 @@ On a **single** question, a capable agent without the skill is fine — live pri
 | [`watchlist-brief`](skills/watchlist-brief/SKILL.md) | Morning or close summary: table, movers, distance to stop/target, upcoming earnings; optional `chart.py` (ASCII / PNG) |
 | [`HEARTBEAT.md`](HEARTBEAT.md) | Checklist for a scheduled check that stays silent unless something new happens |
 
-Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation + `init` / presets + Yahoo ticker check on `add`), `brief.py`, `chart.py` (ASCII sparkline / grid; PNG when matplotlib is installed), `market_calendar.py`, `indicators.py`, `quickstart.py` (offline fixture demo after install), `schedule.py` (weekday cron / Task Scheduler for always-on checks).
+Scripts (`scripts/`, stdlib only): `quotes.py` (multi-provider quote fetcher with fallback), `alerts.py` (rule evaluator + `.alert_state.json` cooldown state), `notify.py` (webhook / Slack / ntfy / desktop / file), `watchlist.py` (CRUD + validation + `init` / presets + Yahoo ticker check on `add`), `brief.py`, `movers.py` (biggest % moves on your list), `gappers.py` (open vs prior close, `--threshold`), `chart.py` (ASCII sparkline / grid; PNG when matplotlib is installed), `market_calendar.py`, `indicators.py`, `quickstart.py` (offline fixture demo after install), `schedule.py` (weekday cron / Task Scheduler for always-on checks), `mcp_server.py` (stdio MCP; no extra packages).
 
 ## Quick start
 
@@ -163,6 +197,10 @@ python3 scripts/brief.py --watchlist tests/fixtures/watchlist.json \
   --fixture tests/fixtures/quotes.json --kind morning --now 2026-10-15T08:30:00-04:00 --format json
 python3 scripts/chart.py AAPL --watchlist tests/fixtures/watchlist.json \
   --fixture tests/fixtures/quotes.json
+python3 scripts/movers.py --watchlist tests/fixtures/watchlist.json \
+  --fixture tests/fixtures/quotes.json --now 2026-10-15T10:00:00-04:00
+python3 scripts/gappers.py --watchlist tests/fixtures/watchlist.json \
+  --fixture tests/fixtures/quotes.json --threshold 2 --now 2026-10-15T10:00:00-04:00
 ```
 
 ### Use it in ChatGPT, Grok Bot, or other chat agents
@@ -241,12 +279,7 @@ Python **3.10+** is tested in CI. Each skill folder includes `scripts/` (same fi
 
 ### Claude Code
 
-Plugin (this repo is a marketplace):
-
-```text
-/plugin marketplace add eli-alvarado/us-watchlist-alerts
-/plugin install us-watchlist-alerts
-```
+Plugin install is at the top of this README (`/plugin marketplace add` then `/plugin install us-watchlist-alerts@us-watchlist-alerts`).
 
 Or symlink into the user skills dir:
 
@@ -311,6 +344,33 @@ Or add `@skills/price-alerts/SKILL.md` (and the sibling skills) to `GEMINI.md`.
 
 Load the three `SKILL.md` files as instructions, give the agent shell access to `python3 scripts/...` from the repo root, and run [HEARTBEAT.md](HEARTBEAT.md) on your scheduler.
 
+## MCP server
+
+Optional. The skill is still the primary interface. `scripts/mcp_server.py` is a **stdlib** JSON-RPC server over stdio (no pip packages, no API key). Tools: `get_quotes`, `watchlist_list` / `watchlist_add` / `watchlist_remove`, `run_alerts`, `morning_brief`, `market_status`, `movers`, `gappers`. Claude Code plugin users get it automatically via `mcpServers` in `.claude-plugin/plugin.json`.
+
+Claude Desktop (`claude_desktop_config.json`) and Cursor (`.cursor/mcp.json` or Settings → MCP):
+
+```json
+{
+  "mcpServers": {
+    "us-watchlist-alerts": {
+      "command": "python3",
+      "args": ["/path/to/us-watchlist-alerts/scripts/mcp_server.py"]
+    }
+  }
+}
+```
+
+Codex (`~/.codex/config.toml`):
+
+```toml
+[mcp_servers.us-watchlist-alerts]
+command = "python3"
+args = ["/path/to/us-watchlist-alerts/scripts/mcp_server.py"]
+```
+
+Registry metadata: [`smithery.yaml`](smithery.yaml), [`server.json`](server.json). Never places trades.
+
 ## Scheduling
 
 This repo also runs a **public sample** on weekdays via `.github/workflows/live.yml` — session-aware, no secrets. Every run writes the job summary. Dated files go to the [`live-snapshots`](https://github.com/eli-alvarado/us-watchlist-alerts/tree/live-snapshots/docs/live) branch (**never `main`**), at most one per ET weekday. Index: [docs/live/](docs/live/).
@@ -364,7 +424,7 @@ WATCHLIST_FILE=long.json  ALERT_STATE_FILE=.alert_state_long.json  python3 scrip
 |---|---|
 | `WATCHLIST_FILE` | Watchlist path. Default: `./watchlist.json` in a project directory (walks up from `.claude/skills/<name>` / `.agents/skills/<name>`), else `~/.config/us-watchlist-alerts/watchlist.json` (Windows: `%APPDATA%\us-watchlist-alerts\`; `$XDG_CONFIG_HOME/us-watchlist-alerts/` when set). Never the skill folder. |
 | `ALERT_STATE_FILE` | Cooldown state (default: `.alert_state.json` next to the watchlist) |
-| `WATCHLIST_FIXTURE` | Quote fixture path (same as `--fixture`). Offline / sample mode for `quotes.py`, `alerts.py`, `brief.py`, `chart.py`, and `watchlist.py add` verification. |
+| `WATCHLIST_FIXTURE` | Quote fixture path (same as `--fixture`). Offline / sample mode for `quotes.py`, `alerts.py`, `brief.py`, `movers.py`, `gappers.py`, `chart.py`, and `watchlist.py add` verification. |
 | `WATCHLIST_NO_VERIFY` | Set to `1` to skip the Yahoo chart check on `watchlist.py add` (same as `--no-verify`) |
 | `WATCHLIST_PROVIDER` | `auto` (default), `alpaca`, `yfinance`, `yahoo`, `finnhub`, `alphavantage` |
 | `WATCHLIST_STALE_AFTER` | Seconds before a regular-session quote is flagged stale (default `900`; `0`=off) |

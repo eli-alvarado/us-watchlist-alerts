@@ -22,6 +22,9 @@ Scripts use the Python 3.10+ standard library. Optional extras in `requirements.
 | Quote field / fallback | `scripts/quotes.py` | Mock `_get` or use `tests/fixtures/quotes.json` |
 | Schema | `scripts/watchlist.py` `validate`, `examples/` | Validation tests |
 | Chart | `scripts/chart.py` | Fixture ASCII / levels; PNG only if matplotlib is present |
+| Movers / gappers | `scripts/screener.py`, `movers.py`, `gappers.py` | Fixture rank + `--threshold` in `tests/test_screener.py` |
+| MCP server | `scripts/mcp_server.py` | `tests/test_mcp.py` (handshake + fixture tools; no network) |
+| Plugin JSON | `.claude-plugin/plugin.json`, `marketplace.json` | `python3 scripts/validate_plugin.py` |
 | Agent instructions | `skills/*/SKILL.md`, `HEARTBEAT.md` | Read them as the agent would; keep "no trades" language |
 
 `npx skills add` copies each `skills/<name>/` folder. After editing a root script or `data/holidays_overrides.json`, run `python3 scripts/bundle_skills.py` so the copies stay identical (CI asserts this). That bundle also ships `examples/quotes-fixture.json` and `scripts/quickstart.py`.

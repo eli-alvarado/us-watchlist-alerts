@@ -28,6 +28,8 @@ python3 scripts/alerts.py --dry-run                                             
 python3 scripts/alerts.py --notify                                                         # also deliver via WATCHLIST_NOTIFY sinks
 python3 scripts/schedule.py                                                                # weekday cron every 5 min (always-on; --dry-run / uninstall)
 python3 scripts/chart.py AAPL                                                              # ASCII chart; --out png if matplotlib
+python3 scripts/movers.py                                                                  # biggest % moves on the list (last vs prior close)
+python3 scripts/gappers.py --threshold 2                                                   # open vs prior close
 python3 scripts/market_calendar.py                                                         # current ET session
 ```
 Output: `ALERT <message>` lines, or `no new alerts`, or `market closed, showing last regular close` after the bell (last regular print; no `--force-session` needed). Weekends and full-day holidays stay silent (`market closed (weekend|holiday). Next session YYYY-MM-DD`) unless `--force-session`. Data errors go to stderr as `WARN` (including `earnings_error` / `iv_error`). `NOTIFY <sink>` confirms delivery; sink failures are `WARN notify …` and must not abort the check. Never treat a notify sink as a broker.

@@ -1034,7 +1034,8 @@ class SkillBundle(unittest.TestCase):
     def test_skill_scripts_match_root(self):
         names = ("alerts.py", "brief.py", "quotes.py", "watchlist.py",
                  "market_calendar.py", "notify.py", "indicators.py", "quickstart.py",
-                 "schedule.py", "chart.py")
+                 "schedule.py", "chart.py",
+                 "screener.py", "movers.py", "gappers.py", "mcp_server.py")
         root = os.path.join(ROOT, "scripts")
         for skill in ("price-alerts", "watchlist-brief", "watchlist-manager"):
             dest = os.path.join(ROOT, "skills", skill, "scripts")
