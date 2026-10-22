@@ -1,0 +1,16 @@
+.git
+.github
+**/.git
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+.env
+.alert_state.json
+.quickstart_state.json
+.nyse_calendar_cache.json
+*.tmp
+/watchlist.json
+docs/hero.gif
+docs/demo.gif
+docs/demo/img
+docs/demo/heartbeat/*.png

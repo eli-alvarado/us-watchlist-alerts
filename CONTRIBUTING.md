@@ -23,7 +23,8 @@ Scripts use the Python 3.10+ standard library. Optional extras in `requirements.
 | Schema | `scripts/watchlist.py` `validate`, `examples/` | Validation tests |
 | Chart | `scripts/chart.py` | Fixture ASCII / levels; PNG only if matplotlib is present |
 | Movers / gappers | `scripts/screener.py`, `movers.py`, `gappers.py` | Fixture rank + `--threshold` in `tests/test_screener.py` |
-| MCP server | `scripts/mcp_server.py` | `tests/test_mcp.py` (handshake + fixture tools + NDJSON stdio subprocess; no network) |
+| MCP server | `scripts/mcp_server.py` | `tests/test_mcp.py` (handshake + fixture tools + NDJSON stdio subprocess; no network). `initialize` / `tools/list` must stay catalog-only. |
+| Glama / Docker | `Dockerfile`, `.dockerignore`, `glama.json` | CI `docker` job builds the image and pipes those two NDJSON requests into `docker run -i --network none` |
 | Plugin JSON | `.claude-plugin/plugin.json`, `marketplace.json` | `python3 scripts/validate_plugin.py` |
 | Agent instructions | `skills/*/SKILL.md`, `HEARTBEAT.md` | Read them as the agent would; keep "no trades" language |
 
@@ -37,7 +38,7 @@ Run from the repo root so `scripts/` imports resolve the same way the skills doc
 
 1. Branch off `main`. **Never commit or push to `main` directly** — including GitHub Actions. The weekday live snapshot publishes dated files to `live-snapshots` and the job summary.
 2. Keep PRs focused. A calendar fix and a README rewrite can be separate.
-3. `python3 -m unittest discover -s tests` must pass. CI runs that command on Python 3.10–3.13.
+3. `python3 -m unittest discover -s tests` must pass. CI runs that command on Python 3.10–3.13, plus a Docker introspection job.
 4. Do not add network calls to the default unittest suite.
 5. Do not add a broker "just send the order" path.
 

@@ -25,3 +25,45 @@ jobs:
         run: python3 scripts/validate_plugin.py
       - name: Run offline unittest suite
         run: python3 -m unittest discover -s tests -v
+
+  docker:
+    name: Docker MCP introspection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image and run initialize + tools/list
+        run: |
+          set -euo pipefail
+          docker build -t us-watchlist-alerts-mcp .
+          {
+            printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}'
+            printf '%s\n' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+          } | docker run --rm -i --network none us-watchlist-alerts-mcp | python3 -c '
+          import json, sys
+          raw = sys.stdin.buffer.read()
+          lines = [ln for ln in raw.splitlines() if ln.strip()]
+          if len(lines) < 2:
+              sys.exit("expected 2 NDJSON replies, got %r" % raw[:400])
+          msgs = [json.loads(ln) for ln in lines]
+          by_id = {m.get("id"): m for m in msgs}
+          init, listed = by_id.get(1), by_id.get(2)
+          if not init or "error" in init or "result" not in init:
+              sys.exit("bad initialize: %s" % init)
+          info = init["result"].get("serverInfo") or {}
+          if info.get("name") != "us-watchlist-alerts":
+              sys.exit("unexpected serverInfo: %s" % info)
+          if "tools" not in (init["result"].get("capabilities") or {}):
+              sys.exit("initialize missing tools capability")
+          if not listed or "error" in listed or "result" not in listed:
+              sys.exit("bad tools/list: %s" % listed)
+          tools = listed["result"].get("tools") or []
+          names = {t.get("name") for t in tools}
+          need = {
+              "get_quotes", "watchlist_list", "watchlist_add", "watchlist_remove",
+              "run_alerts", "morning_brief", "market_status", "movers", "gappers",
+          }
+          missing = need - names
+          if missing:
+              sys.exit("tools/list missing %s (got %s)" % (sorted(missing), sorted(names)))
+          print("ok", " ".join(sorted(names)))
+          '

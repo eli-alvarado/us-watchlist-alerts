@@ -1,6 +1,7 @@
 """Stdlib MCP server: handshake, tools, fixture calls. No network."""
 from __future__ import annotations
 import io, json, os, subprocess, sys, tempfile, unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -43,6 +44,21 @@ class McpProtocol(unittest.TestCase):
         } <= names)
         unknown = mcp.handle({"jsonrpc": "2.0", "id": 3, "method": "nope"})
         self.assertEqual(unknown["error"]["code"], -32601)
+
+    def test_initialize_and_tools_list_do_not_fetch_quotes(self):
+        """Glama introspection must work offline — catalog only, no Yahoo."""
+        with mock.patch.object(mcp.qt, "get_quote", side_effect=AssertionError("quotes fetched")):
+            with mock.patch.object(mcp.qt, "_get", side_effect=AssertionError("http")):
+                init = mcp.handle({
+                    "jsonrpc": "2.0", "id": 1, "method": "initialize",
+                    "params": {"protocolVersion": "2024-11-05", "capabilities": {},
+                               "clientInfo": {"name": "glama", "version": "0"}},
+                })
+                listed = mcp.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        self.assertEqual(init["result"]["serverInfo"]["name"], "us-watchlist-alerts")
+        names = {t["name"] for t in listed["result"]["tools"]}
+        self.assertIn("get_quotes", names)
+        self.assertIn("gappers", names)
 
     def test_get_quotes_and_movers_fixture(self):
         resp, text, err = _call("get_quotes", symbols=["AAPL"], fixture=FX)

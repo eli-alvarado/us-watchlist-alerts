@@ -371,7 +371,18 @@ command = "python3"
 args = ["/path/to/us-watchlist-alerts/scripts/mcp_server.py"]
 ```
 
-Registry metadata: [`smithery.yaml`](smithery.yaml), [`server.json`](server.json). Never places trades.
+Registry metadata: [`smithery.yaml`](smithery.yaml), [`server.json`](server.json), [`glama.json`](glama.json). Never places trades.
+
+### Docker
+
+[Glama](https://glama.ai/mcp/servers) builds the repo-root `Dockerfile` and speaks MCP over stdin to run `initialize` and `tools/list`. Those two methods are catalog-only — they do not fetch quotes and work offline. Locally:
+
+```bash
+docker build -t us-watchlist-alerts-mcp .
+docker run -i us-watchlist-alerts-mcp
+```
+
+Same stdio NDJSON as `python3 scripts/mcp_server.py`. No extra packages; the image is `python:3.12-slim` plus this repo.
 
 ## Scheduling
 
@@ -501,7 +512,7 @@ Use **tradermonty** or **himself65** for research. Use **gauss314** when you int
 python3 -m unittest discover -s tests
 ```
 
-No network, no extra pip packages. GitHub Actions runs that command on Python 3.10, 3.11, 3.12 and 3.13.
+No network, no extra pip packages. GitHub Actions runs that command on Python 3.10, 3.11, 3.12 and 3.13, plus a Docker job that builds the image and pipes `initialize` + `tools/list` into an isolated `docker run -i`.
 
 ## Contributing and growth
 

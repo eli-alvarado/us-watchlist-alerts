@@ -392,6 +392,8 @@ def handle(msg):
     if method == "ping":
         return _ok(mid, {})
     if method == "tools/list":
+        # Static catalog. Glama introspection (and CI `docker run --network none`)
+        # must not fetch quotes or touch the network.
         return _ok(mid, {"tools": TOOLS})
     if method == "tools/call":
         name = params.get("name")
