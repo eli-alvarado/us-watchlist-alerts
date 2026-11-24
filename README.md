@@ -1,6 +1,6 @@
 # US Stock Watchlist & Price Alerts: Agent Skills for Claude Code, Codex, Gemini CLI, and Cursor
 
-[![CI](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml/badge.svg)](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml) [![Bluesky](https://img.shields.io/badge/Bluesky-follow-0285FF?logo=bluesky&logoColor=white)](https://bsky.app/profile/uswatchlist.bsky.social)
+[![CI](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml/badge.svg)](https://github.com/eli-alvarado/us-watchlist-alerts/actions/workflows/ci.yml) [![Bluesky](https://img.shields.io/badge/Bluesky-follow-0285FF?logo=bluesky&logoColor=white)](https://bsky.app/profile/uswatchlist.bsky.social) [![eli-alvarado/us-watchlist-alerts MCP server](https://glama.ai/mcp/servers/eli-alvarado/us-watchlist-alerts/badges/score.svg)](https://glama.ai/mcp/servers/eli-alvarado/us-watchlist-alerts)
 
 **Featured in:** [awesome-gemini-cli](https://github.com/Piebald-AI/awesome-gemini-cli)
 
