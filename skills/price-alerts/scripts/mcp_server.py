@@ -225,10 +225,13 @@ def tool_watchlist_add(args):
         wlm.init_file(path)
     wl = wlm.load(path)
     skip = bool(args.get("no_verify"))
+    warn = None
     if not skip:
         status, msg = wlm.verify_symbol(symbol, fixture=qt.resolve_fixture(args.get("fixture")))
         if status == "unknown":
             return _tool_result(msg, True)
+        if status == "network":
+            warn = msg
     alerts_in = args.get("alerts") or []
     parsed = [wlm.parse_alert(x) for x in alerts_in]
     t = wlm.add(
@@ -238,7 +241,10 @@ def tool_watchlist_add(args):
         alerts=parsed, side=args.get("side"),
     )
     wlm.save(wl, path)
-    return _tool_result(_dump(t))
+    text = _dump(t)
+    if warn:
+        text = f"WARN {warn}\n{text}"
+    return _tool_result(text)
 
 
 def tool_watchlist_remove(args):

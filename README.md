@@ -156,13 +156,18 @@ python3 .claude/skills/price-alerts/scripts/quotes.py AAPL
 # Cursor / Codex / Gemini CLI: .agents/skills/price-alerts/scripts/...
 ```
 
-`quickstart.py` reads the bundled example **in place** for the fixture demo and never writes `watchlist.json`. `watchlist.py init` writes an **empty** list at the shared default path so a first `add NVDA` succeeds. All three skills use the same file: `$WATCHLIST_FILE`, else `./watchlist.json` in this project (also when cwd is `.claude/skills/<name>` or `.agents/skills/<name>`), else `~/.config/us-watchlist-alerts/watchlist.json`. Pass `--example` only if you want the sample book (a live ~$342 AAPL print will fire those fixture-era levels once):
+`quickstart.py` reads the bundled example **in place** for the fixture demo and never writes `watchlist.json`. `watchlist.py init` writes an **empty** list at the shared default path so a first `add NVDA` succeeds. All three skills use the same file: `$WATCHLIST_FILE`, else `./watchlist.json` in this project (also when cwd is `.claude/skills/<name>` or `.agents/skills/<name>`), else `~/.config/us-watchlist-alerts/watchlist.json`. Pass `--example` only if you want the sample book (a live ~$342 AAPL print will fire those fixture-era levels once). Each block below is a copy-pasteable sequence (`init` refuses to overwrite an existing file; `add` of a ticker already on a preset fails — use `update --append`):
 
 ```bash
 python3 .claude/skills/watchlist-manager/scripts/watchlist.py init
+python3 .claude/skills/watchlist-manager/scripts/watchlist.py add AAPL --alert pct_change_down:3 --no-verify
+python3 .claude/skills/price-alerts/scripts/alerts.py
+```
+
+```bash
 python3 .claude/skills/watchlist-manager/scripts/watchlist.py init --list-presets
 python3 .claude/skills/watchlist-manager/scripts/watchlist.py init --preset mega-cap-tech
-python3 .claude/skills/watchlist-manager/scripts/watchlist.py add AAPL --alert pct_change_down:3 --no-verify
+python3 .claude/skills/watchlist-manager/scripts/watchlist.py update AAPL --alert pct_change_down:3 --append
 python3 .claude/skills/price-alerts/scripts/alerts.py
 ```
 
@@ -510,9 +515,10 @@ Use **tradermonty** or **himself65** for research. Use **gauss314** when you int
 
 ```bash
 python3 -m unittest discover -s tests
+python3 -m unittest tests.test_e2e_smoke -v
 ```
 
-No network, no extra pip packages. GitHub Actions runs that command on Python 3.10, 3.11, 3.12 and 3.13, plus a Docker job that builds the image and pipes `initialize` + `tools/list` into an isolated `docker run -i`.
+No network, no extra pip packages. GitHub Actions runs the unittest suite on Python 3.10, 3.11, 3.12 and 3.13 (including `tests/test_e2e_smoke.py`, which spawns the real CLI scripts and `scripts/mcp_server.py` over stdio in a temp directory), plus a Docker job that builds the image and pipes `initialize` + `tools/list` into an isolated `docker run -i`.
 
 ## Contributing and growth
 
