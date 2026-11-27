@@ -40,21 +40,29 @@ Alert `type` values and their `value` meaning are documented in `../price-alerts
 A `stop` implies a `stop_hit` alert and `targets` imply `target_hit` automatically.
 
 ## Operations (prefer the script; it validates and writes atomically)
-`scripts/` ships next to this SKILL.md after `npx skills add`. Run from the project root by path (or from a git clone; root `scripts/` is the same files):
+`scripts/` ships next to this SKILL.md after `npx skills add`. Run from the project root by path (or from a git clone; root `scripts/` is the same files). `init` will not overwrite an existing file — pick one init, then mutate.
+
+Empty live list, then add / update / list / show / validate / remove:
+
 ```bash
 python3 scripts/watchlist.py init
-python3 scripts/watchlist.py init --example
-python3 scripts/watchlist.py init --list-presets
-python3 scripts/watchlist.py init --preset mega-cap-tech
 python3 scripts/watchlist.py add NVDA --thesis "AI capex" --entry 160 --target 190 --target 220 --stop 140 --tag ai --tag semis --alert price_below:150
-python3 scripts/watchlist.py add NVDA --file swing.json --alert price_below:150
-python3 scripts/watchlist.py add NVDA --no-verify
 python3 scripts/watchlist.py update NVDA --stop 145
 python3 scripts/watchlist.py update NVDA --tag megacap --alert rsi_above:75 --append
-python3 scripts/watchlist.py remove NVDA
 python3 scripts/watchlist.py list [--tag semis]
 python3 scripts/watchlist.py show NVDA
 python3 scripts/watchlist.py validate
+python3 scripts/watchlist.py remove NVDA
+```
+
+`--file` can sit before or after the subcommand: `python3 scripts/watchlist.py add NVDA --file swing.json --alert price_below:150`. Offline: `python3 scripts/watchlist.py add NVDA --no-verify`. Sample book (fixture-era levels, not a live list): `python3 scripts/watchlist.py init --example`.
+
+Preset (symbol list, no price levels). Tickers already on the preset cannot be `add`ed again — attach alerts with `update --append`:
+
+```bash
+python3 scripts/watchlist.py init --list-presets
+python3 scripts/watchlist.py init --preset mega-cap-tech
+python3 scripts/watchlist.py update NVDA --alert price_below:150 --append
 ```
 `add` looks the symbol up on the Yahoo chart (same default quote path as `quotes.py`). Unknown tickers are rejected (`NVDA is not a known US ticker…`). `--no-verify` / `WATCHLIST_NO_VERIFY=1` skips the lookup when you are offline. If the chart request fails because the network is down, the CLI prints a WARN and **adds the ticker anyway**. `--fixture` / `WATCHLIST_FIXTURE` checks the bundled sample quotes instead — presets work in that mode (the fixture `_default` alias covers built-in preset symbols that are not in the 3-name demo).
 If Python is unavailable, edit the JSON by hand following the schema and the validation rules below.

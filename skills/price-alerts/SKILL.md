@@ -15,11 +15,16 @@ Evaluates alert rules from the watchlist (see `watchlist-manager`) against fresh
 **Watchlist location** (shared with `watchlist-manager` and `watchlist-brief`; survives reinstall): `$WATCHLIST_FILE` if set, else `./watchlist.json` in the project directory (if cwd is this skill folder or `scripts/`, the scripts walk up to the project that contains `.claude/skills/` or `.agents/skills/` and use that file), else `~/.config/us-watchlist-alerts/watchlist.json` (`%APPDATA%\us-watchlist-alerts\` on Windows; `$XDG_CONFIG_HOME/us-watchlist-alerts/` when that env is set). A leftover in-skill `watchlist.json` is copied to that destination on first run. Alert state defaults to `.alert_state.json` next to that file (`$ALERT_STATE_FILE` overrides). `watchlist.py init` / `add` / `list` print `using <path>`.
 
 ## Run it
+`init` will not overwrite an existing file. Empty list: `python3 scripts/watchlist.py init`. Sample book: `python3 scripts/watchlist.py init --example`. Or a tagged symbol list (`--list-presets` does not write):
+
 ```bash
-python3 scripts/watchlist.py init                                                         # empty watchlist if missing
-python3 scripts/watchlist.py init --example                                               # sample AAPL/TSLA/NVDA (fixture-era levels)
-python3 scripts/watchlist.py init --list-presets                                          # mega-cap-tech, index-etfs, sector-etfs, dividend-staples
-python3 scripts/watchlist.py init --preset index-etfs                                     # SPY/QQQ/DIA/IWM (works with --fixture / sample mode)
+python3 scripts/watchlist.py init --list-presets
+python3 scripts/watchlist.py init --preset index-etfs
+```
+
+Then:
+
+```bash
 python3 scripts/quickstart.py                                                             # offline fixture demo; does not write watchlist.json
 python3 scripts/alerts.py                                                                 # uses the shared watchlist + state paths
 python3 scripts/alerts.py --format json                                                    # machine-readable

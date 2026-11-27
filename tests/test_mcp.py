@@ -115,6 +115,22 @@ class McpProtocol(unittest.TestCase):
         self.assertTrue(err)
         self.assertIn("unknown tool", text)
 
+    def test_watchlist_add_network_outage_warns_and_adds(self):
+        d = tempfile.mkdtemp()
+        path = os.path.join(d, "wl.json")
+
+        def timeout(symbol, provider="yahoo", fixture=None, fetch_earnings=True):
+            raise mcp.qt.QuoteError("yahoo", "timed out", hint="connection timed out")
+
+        with mock.patch.object(mcp.qt, "get_quote", side_effect=timeout):
+            resp, text, err = _call("watchlist_add", symbol="AAPL", file=path)
+        self.assertFalse(err, text)
+        self.assertIn("WARN", text)
+        self.assertIn("Adding anyway", text)
+        payload = json.loads(text[text.index("{"):])
+        self.assertEqual(payload["symbol"], "AAPL")
+        self.assertTrue(os.path.exists(path))
+
     def _assert_ndjson_replies(self, raw):
         """Every stdout byte must be one compact JSON-RPC line; no headers."""
         self.assertFalse(raw.startswith(b"Content-Length"), raw[:80])

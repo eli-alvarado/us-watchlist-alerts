@@ -321,6 +321,8 @@ def verify_symbol(symbol, fixture=None):
     ``--fixture`` / ``WATCHLIST_FIXTURE`` uses sample quotes instead of the network.
     """
     symbol = (symbol or "").upper()
+    if not SYMBOL_RE.match(symbol):
+        return "unknown", f"bad symbol {symbol!r}"
     fixture = (fixture or os.environ.get("WATCHLIST_FIXTURE") or "").strip() or None
     import quotes as qt
     try:
